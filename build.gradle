@@ -59,6 +59,18 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
+        // A second client for local multiplayer testing (e.g. pay/request between two players). Needs its own
+        // gameDirectory — two clients pointed at the same run/ folder fight over lock files (usercache.json,
+        // logs/latest.log) if launched at the same time. Connect both to a `./gradlew runServer` via Multiplayer >
+        // Direct Connect > localhost (they can't share a singleplayer world, only a dedicated server).
+        client2 {
+            client()
+            gameDirectory = project.file('run-client2')
+            programArguments.addAll '--username', 'Player2'
+
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
         server {
             server()
             programArgument '--nogui'

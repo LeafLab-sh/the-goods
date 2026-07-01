@@ -47,15 +47,19 @@ Two APIs turned out to have changed since older tutorials/mods: `SavedData` no l
 
 **Test:** `/goods balance` → `0.0000000000`. `/goods give <you> 100` → balance `100.0000000000`. Save-and-quit, reload the same world, `/goods balance` still `100.0000000000` (proves `SavedData` persistence). `/goods reset <you>` → back to 0. `/goods take <you> 50` at 0 balance → stays at 0.
 
-## Milestone 3 — Pay and request commands
+## Milestone 3 — Pay and request commands (done)
 
 Social commands, clickable chat buttons, request persistence.
 
+**Design decision, confirmed with the user:** `/goods request 50 Bob` means the requester (whoever runs the command) is asking to *receive* 50 from Bob — Bob is the payer and gets the Accept/Deny prompt; accepting pays 50 from Bob to the requester, with Bob's balance re-checked at that moment. This is the "sender" the spec means when it says accept re-validates the sender's balance — money-sender, not command-sender.
+
+Went further than originally scoped: Accept/Deny/Cancel buttons also appear directly on each line of `/goods request list` (not just the original notification), cancelling notifies the other party, and the admin commands (`give`/`take`/`reset`) now also notify the affected player if they're online. Player-name arguments switched from `EntityArgument.player()` (online-only) to a shared `playerArgument()` helper wired to `StringArgumentType.word()` + manual suggestions, so offline players can still be targeted while keeping tab-completion for online ones.
+
 **Files:**
-- `sh.leaflab.goods.economy.TradeRequest` — sender/target UUID + amount, stored in `SavedData` keyed by sender+target pair (new request overwrites old — no TTL logic needed, requests never expire).
-- `sh.leaflab.goods.command.GoodsCommand` extended with `pay`, `request`, `request accept|deny|cancel|list`.
-- PlayerName resolution via server `GameProfileCache` (works for offline players; clean command failure on unknown profile).
-- Chat construction with clickable Accept/Deny using current `ClickEvent` API (verify current shape — this has changed across MC versions from a two-arg `Action`+`String` constructor to sealed-interface-style records).
+- `sh.leaflab.goods.economy.TradeRequest` — requester/payer UUID + amount, folded into `EconomyData` as a list (new request from the same requester→payer pair replaces the old one — no TTL, requests never expire).
+- `sh.leaflab.goods.command.GoodsCommand` extended with `pay`, `request`, `request accept|deny|cancel|list`; `give`/`take`/`reset` switched to the same offline-capable resolution.
+- PlayerName resolution via `server.services().nameToIdCache()` — the modern equivalent of the old `GameProfileCache` (works for offline players; clean command failure on unknown profile).
+- Chat construction with clickable Accept/Deny/Cancel via `ClickEvent.RunCommand` (a simple record in this version, not the old `Action`+`String` constructor).
 
 **Gotcha:** Accept must re-validate the sender's balance **at resolution time**, not at request-creation time (balance may have dropped since).
 
