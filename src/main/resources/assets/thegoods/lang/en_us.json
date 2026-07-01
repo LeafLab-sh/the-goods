@@ -1,0 +1,13 @@
+{
+  "itemGroup.thegoods": "Example Mod Tab",
+  "block.thegoods.example_block": "Example Block",
+  "item.thegoods.example_item": "Example Item",
+
+  "thegoods.configuration.title": "The Goods Configs",
+  "thegoods.configuration.section.thegoods.common.toml": "The Goods Configs",
+  "thegoods.configuration.section.thegoods.common.toml.title": "The Goods Configs",
+  "thegoods.configuration.items": "Item List",
+  "thegoods.configuration.logDirtBlock": "Log Dirt Block",
+  "thegoods.configuration.magicNumberIntroduction": "Magic Number Text",
+  "thegoods.configuration.magicNumber": "Magic Number"
+}
