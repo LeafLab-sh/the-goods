@@ -32,6 +32,10 @@ public class StockData extends SavedData {
     );
 
     private final Map<Item, Long> stock;
+    // In-memory only (not persisted): increments on every stock change, used to tell a buy quote "still fresh" from
+    // "stale" (see QuoteHash) and to know when a menu's live catalog view needs refreshing. Resetting to 0 across a
+    // restart is fine — no quote survives a restart anyway.
+    private long epoch;
 
     private StockData(Map<Item, Long> stock) {
         this.stock = new HashMap<>(stock);
@@ -47,6 +51,22 @@ public class StockData extends SavedData {
 
     public void setStock(Item item, long quantity) {
         stock.put(item, quantity);
+        epoch++;
         setDirty();
+    }
+
+    public long getEpoch() {
+        return epoch;
+    }
+
+    /** All items with positive stock. Returns a defensive copy — safe to iterate while trades continue elsewhere. */
+    public Map<Item, Long> positiveStock() {
+        Map<Item, Long> result = new HashMap<>();
+        stock.forEach((item, quantity) -> {
+            if (quantity > 0) {
+                result.put(item, quantity);
+            }
+        });
+        return result;
     }
 }

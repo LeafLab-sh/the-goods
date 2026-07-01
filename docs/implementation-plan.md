@@ -106,24 +106,27 @@ No real GUI texture yet — `TradeHubScreen` draws a plain-color panel and hand-
 - `sh.leaflab.goods.network.BalanceSyncPayload` + `sh.leaflab.goods.network.NetworkHandler` — registered via `RegisterPayloadHandlersEvent`; sent server→client from `TradeHubMenu#broadcastChanges` whenever the owning player's balance changes while the menu is open.
 - `TradeHubBlock` interact handler now opens the menu instead of selling directly — `useItemOn` was removed entirely, since selling now happens through the Sell Slot, not by right-clicking with an item in hand.
 
-## Milestone 6 — Catalog widget + full buying flow
+## Milestone 6 — Catalog widget + full buying flow (done, on branch `milestone-6-catalog-buying`)
 
 The hardest milestone: hand-rolled non-`Slot` item grid, full packet suite, quote integrity.
 
+Several deliberate simplifications from the original plan:
+- Catalog cells are real client-side `AbstractWidget`s (`CatalogCellWidget`, added via `addRenderableWidget`) rather than hand-rolled raw mouse-coordinate hit-testing. Still not a menu `Slot` — not bounded by `Slot` count limits — just built on the existing widget click-dispatch instead of custom geometry code.
+- Pagination (Prev/Next) instead of a continuous drag-scrollbar — simpler to get right, still browses a catalog of any size.
+- No separate `StockUpdatePayload`: `TradeHubMenu` remembers each player's last `CatalogQueryPayload` and re-answers it with a fresh `CatalogResultPayload` whenever the stock epoch changes, inside the same per-tick `broadcastChanges()` already used for balance sync — still coalesced once per tick, without a second payload type.
+- `QuoteHash` (`itemId+stock+stockEpoch`) distinguishes "fresh" from "not fresh" uniformly rather than separately detecting stale-vs-forged, which would need server-side quote history. The safety property (server never trusts client price) holds either way.
+
+**Bug found after initial testing:** typing a plain letter (e.g. the default inventory-close key "E") into the search box closed the whole screen. `EditBox#keyPressed` only consumes special keys (backspace, arrows, paste); plain printable characters are handled solely by the separate `charTyped` event, so the unconsumed `keyPressed` for "E" fell through to `AbstractContainerScreen`'s inventory-close keybind check. Fixed by replicating the exact guard vanilla's own `CreativeModeInventoryScreen` uses for its search box (same situation): swallow the key whenever the search box has focus, unless it's Escape — see `CatalogWidget#searchConsumesKey` and `TradeHubScreen#keyPressed`.
+
 **Files:**
-- Packets: `CatalogQueryPayload` (C→S: search/sort/scroll), `CatalogResultPayload` (S→C: `{itemId, stock, unitPrice, quoteHash}` page), `BuyRequestPayload` (C→S: itemId+qty+echoed quoteHash), `StockUpdatePayload` (S→C, coalesced **once per server tick** across all open menus — needs a `ServerTickEvent.Post` listener aggregating diffs, not a packet per transaction).
-- `sh.leaflab.goods.economy.QuoteHash` — short hash of `itemId+stock+unitPrice+quoteEpoch`; distinguishes stale-quote (hash matches a real prior quote → reject+refresh) from forged/replayed (hash matches nothing → reject+log as suspicious).
-- `sh.leaflab.goods.client.gui.CatalogWidget` — search box, server-sorted Name/Price/Stock × asc/desc, scrollable grid excluding 0-stock items, **manual click hit-testing** (mouse coords → grid cell index — no `Slot` machinery does this for you; budget real time here, this is genuinely fiddly geometry code).
-- `sh.leaflab.goods.client.gui.BuyDialog` — +/-/max buttons, qty clamped to `min(affordable-with-fee, available-stock)`, receipt breakdown computed by **calling the same shared `Currency` class** used server-side (not a reimplementation — any divergence breaks the spec's "preview never disagrees with server charge" guarantee).
-- `sh.leaflab.goods.economy.TradeService#buy(...)` — validates itemId/qty (registry membership, allow/deny, `0 < qty <= stock`) **before** any pricing math; re-derives price from live stock regardless of client's claim; atomic deduct/decrement/give; full rejection on any failure.
+- Packets: `CatalogQueryPayload` (C→S: search/sortKey/ascending/page), `CatalogResultPayload` (S→C: page of `{itemId, stock, quoteHash}` + feePercent + pagination info — unit price isn't sent, the client derives it from `stock` via the same `Currency` methods the server uses, so it can never drift), `BuyRequestPayload` (C→S: itemId+qty+quoteHash), `BuyResultPayload` (S→C: outcome, for the Buy Dialog to react to without parsing chat).
+- `sh.leaflab.goods.economy.QuoteHash` — hash of `itemId+stock+stockEpoch` (`StockData` tracks an in-memory-only epoch, incremented on every stock change).
+- `sh.leaflab.goods.client.gui.CatalogWidget`/`CatalogCellWidget` — search box, server-sorted Name/Price/Stock (one button cycles sort key then direction), paginated grid excluding 0-stock items.
+- `sh.leaflab.goods.client.gui.BuyDialog` — embedded panel (not a popup Screen) with +/-/Max buttons and a receipt computed via the same shared `Currency.buyCostWithFee` used server-side.
+- `sh.leaflab.goods.economy.TradeService#buy(...)` — validates quantity, item, stock, quote freshness, balance, and inventory room (in that order, before charging anything) then atomically deducts balance/stock and gives items.
+- `sh.leaflab.goods.economy.TradeService#queryCatalog(...)` — search/sort/paginate stock server-side, reused by both the initial query and the epoch-triggered refresh.
 
-**Gotcha — atomicity:** the server is single-threaded for game-state mutation, but `CustomPacketPayload` handlers can run off the main thread depending on registration. Explicitly hop to the main thread (`context.enqueueWork(...)` or 26.2 equivalent) before touching stock/balance in the buy handler — once synchronous on the main thread, check→compute→commit is atomic for free.
-
-**Reference mods:**
-- **Applied Energistics 2** (`AppliedEnergistics/Applied-Energistics-2`, GPL) — go straight to the ME terminal screen's item-grid rendering and scroll/click hit-testing (search their source tree for the terminal screen package; exact class names shift by release). This is the exact pattern the spec's own design doc names.
-- **JEI** (`mezz/JustEnoughItems`, MIT) — simpler fallback reference: their ingredient list panel's layout/pagination and click-to-ingredient lookup, a flatter widget than AE2's terminal.
-
-**Test:** catalog shows only stock>0 items; search filters; sort modes reorder (cursor drift during scroll is accepted per spec, don't chase it). Buy Dialog receipt matches `unitPrice × qty` + fee exactly, cross-checked against `/goods balance`. Buy at exact affordable max — doesn't overcharge. Buy more than stock — rejected. Two clients buying the same scarce item near-simultaneously — no duplication/negative stock. Full inventory — buy rejects before charging (balance unchanged). Stale/forged quote — rejected/refreshed, not silently repriced.
+**Test:** catalog shows only stock>0 items; search filters (after a short typing debounce); sort button cycles Name/Price/Stock and direction; Prev/Next page. Buy Dialog receipt matches the server's own `Currency` formula exactly, cross-checked against `/goods balance`. Buy at exact affordable max — doesn't overcharge. Buy more than stock, more than you can afford, or with a full inventory — all reject before charging anything. Two clients buying the same scarce item near-simultaneously — no duplication/negative stock.
 
 ## Milestone 7 — Metrics, Sell Dialog toggle, edge-case hardening
 

@@ -41,6 +41,15 @@ public final class Currency {
     }
 
     /**
+     * Buy cost with a percentage fee applied to the raw value before the single rounding step, so client preview
+     * and server charge always agree exactly — the fee must never be added after rounding.
+     */
+    public static long buyCostWithFee(long stockBefore, long quantity, int feePercent) {
+        double withFee = buyRawCost(stockBefore, quantity) * (1.0 + feePercent / 100.0);
+        return ceilToFixedPoint(withFee);
+    }
+
+    /**
      * Converts a raw (unscaled) currency amount to fixed-point units, rounding down. Exposed so callers that need
      * to apply something (like a transaction fee) to a raw value before rounding — the value must be rounded once,
      * at the very end, not rounded and then adjusted, or the wash-trading exploit this rounding policy exists to

@@ -10,8 +10,15 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import sh.leaflab.goods.Config;
 import sh.leaflab.goods.economy.Economy;
+import sh.leaflab.goods.economy.Stock;
+import sh.leaflab.goods.economy.TradeService;
 import sh.leaflab.goods.network.BalanceSyncPayload;
+import sh.leaflab.goods.network.BuyRequestPayload;
+import sh.leaflab.goods.network.BuyResultPayload;
+import sh.leaflab.goods.network.CatalogQueryPayload;
+import sh.leaflab.goods.network.CatalogResultPayload;
 import sh.leaflab.goods.registry.ModMenuTypes;
 
 public class TradeHubMenu extends AbstractContainerMenu {
@@ -23,12 +30,25 @@ public class TradeHubMenu extends AbstractContainerMenu {
     private long lastSyncedBalance = Long.MIN_VALUE;
     private long clientBalance;
 
+    // Server-side: whatever the client last asked the catalog to show, re-answered whenever stock changes so the
+    // client doesn't have to re-ask (see broadcastChanges). Client-side: the latest page/result received.
+    private CatalogQueryPayload lastCatalogQuery;
+    private long lastSyncedStockEpoch = -1;
+    private CatalogResultPayload clientCatalogResult;
+    private BuyResultPayload clientLastBuyResult;
+
+    // Layout constants shared with TradeHubScreen/CatalogWidget/BuyDialog: the catalog grid occupies (8,42)
+    // through roughly (134,114), the Sell Slot sits to its right, and the Buy Dialog strip runs below the
+    // catalog's Prev/Next row (y=136-176) before the player inventory starts.
+    public static final int SELL_SLOT_X = 160;
+    public static final int SELL_SLOT_Y = 42;
+
     public TradeHubMenu(int containerId, Inventory playerInventory) {
         super(ModMenuTypes.TRADE_HUB.get(), containerId);
         this.serverPlayerOwner = playerInventory.player instanceof ServerPlayer serverPlayer ? serverPlayer : null;
 
-        this.addSlot(new SellSlot(sellContainer, 0, 80, 35, playerInventory.player));
-        this.addStandardInventorySlots(playerInventory, 8, 84);
+        this.addSlot(new SellSlot(sellContainer, 0, SELL_SLOT_X, SELL_SLOT_Y, playerInventory.player));
+        this.addStandardInventorySlots(playerInventory, 8, 182);
     }
 
     @Override
@@ -55,20 +75,55 @@ public class TradeHubMenu extends AbstractContainerMenu {
         return true;
     }
 
-    // Pushes the player's balance to their client whenever it changes while this menu is open — vanilla's
-    // ContainerData only carries shorts, not enough range for a fixed-point long balance, so this is a plain
-    // custom packet instead. broadcastChanges() already runs once per server tick for every open menu.
+    // Pushes the player's balance to their client whenever it changes while this menu is open, and re-answers the
+    // client's last catalog query whenever stock changes — both piggyback on broadcastChanges() already running
+    // once per server tick for every open menu, so both are naturally coalesced across a tick's worth of trades.
     @Override
     public void broadcastChanges() {
         super.broadcastChanges();
-        if (serverPlayerOwner != null) {
-            MinecraftServer server = serverPlayerOwner.level().getServer();
-            long currentBalance = Economy.getBalance(server, serverPlayerOwner.getUUID());
-            if (currentBalance != lastSyncedBalance) {
-                lastSyncedBalance = currentBalance;
-                PacketDistributor.sendToPlayer(serverPlayerOwner, new BalanceSyncPayload(currentBalance));
+        if (serverPlayerOwner == null) {
+            return;
+        }
+        MinecraftServer server = serverPlayerOwner.level().getServer();
+
+        long currentBalance = Economy.getBalance(server, serverPlayerOwner.getUUID());
+        if (currentBalance != lastSyncedBalance) {
+            lastSyncedBalance = currentBalance;
+            PacketDistributor.sendToPlayer(serverPlayerOwner, new BalanceSyncPayload(currentBalance));
+        }
+
+        if (lastCatalogQuery != null) {
+            long currentEpoch = Stock.getEpoch(server);
+            if (currentEpoch != lastSyncedStockEpoch) {
+                lastSyncedStockEpoch = currentEpoch;
+                sendCatalogResult(lastCatalogQuery);
             }
         }
+    }
+
+    public void handleCatalogQuery(CatalogQueryPayload query) {
+        if (serverPlayerOwner == null) {
+            return;
+        }
+        this.lastCatalogQuery = query;
+        this.lastSyncedStockEpoch = Stock.getEpoch(serverPlayerOwner.level().getServer());
+        sendCatalogResult(query);
+    }
+
+    public void handleBuyRequest(BuyRequestPayload request) {
+        if (serverPlayerOwner == null) {
+            return;
+        }
+        TradeService.BuyOutcome outcome = TradeService.buy(serverPlayerOwner, request.item(), request.quantity(), request.quoteHash());
+        PacketDistributor.sendToPlayer(serverPlayerOwner, new BuyResultPayload(outcome.success(), outcome.messageKey()));
+    }
+
+    private void sendCatalogResult(CatalogQueryPayload query) {
+        MinecraftServer server = serverPlayerOwner.level().getServer();
+        TradeService.CatalogPage page = TradeService.queryCatalog(server, query.search(), query.sortKey(), query.ascending(), query.page());
+        int feePercent = Config.TRANSACTION_FEE_PERCENT.get();
+        PacketDistributor.sendToPlayer(
+                serverPlayerOwner, new CatalogResultPayload(page.entries(), page.page(), page.totalPages(), feePercent));
     }
 
     public long getClientBalance() {
@@ -77,5 +132,21 @@ public class TradeHubMenu extends AbstractContainerMenu {
 
     public void setClientBalance(long balance) {
         this.clientBalance = balance;
+    }
+
+    public CatalogResultPayload getClientCatalogResult() {
+        return clientCatalogResult;
+    }
+
+    public void setClientCatalogResult(CatalogResultPayload result) {
+        this.clientCatalogResult = result;
+    }
+
+    public BuyResultPayload getClientLastBuyResult() {
+        return clientLastBuyResult;
+    }
+
+    public void setClientLastBuyResult(BuyResultPayload result) {
+        this.clientLastBuyResult = result;
     }
 }

@@ -3,6 +3,19 @@
   "block.thegoods.trade_hub": "Trade Hub",
   "block.thegoods.trade_hub.not_eligible": "That item can't be traded",
   "block.thegoods.trade_hub.sold": "Sold %s %s for %s",
+  "block.thegoods.trade_hub.bought": "Bought %s %s for %s",
+
+  "gui.thegoods.catalog.search": "Search",
+  "gui.thegoods.buy.max": "Max",
+  "gui.thegoods.buy.confirm": "Confirm",
+
+  "commands.thegoods.buy.success": "Purchase complete",
+  "commands.thegoods.buy.invalid_quantity": "Invalid quantity",
+  "commands.thegoods.buy.unknown_item": "Unknown item",
+  "commands.thegoods.buy.insufficient_stock": "Not enough stock available",
+  "commands.thegoods.buy.stale_quote": "Price changed, refreshing catalog",
+  "commands.thegoods.buy.insufficient_balance": "Insufficient balance",
+  "commands.thegoods.buy.inventory_full": "Inventory full",
 
   "commands.thegoods.balance": "Your balance: %s",
   "commands.thegoods.give": "Gave %s to %s (new balance: %s)",
