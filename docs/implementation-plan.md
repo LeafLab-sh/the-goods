@@ -67,21 +67,25 @@ Went further than originally scoped: Accept/Deny/Cancel buttons also appear dire
 
 **Test:** two-client (or client+server) test: `/goods pay <p2> 25` transfers immediately with no confirm, and fully rejects (no partial) on insufficient balance. `/goods request 25 <p2>` produces a clickable chat message on p2's side; clicking Accept updates both balances. A second request from the same sender/target replaces the first. Test `request cancel` and `request list` (both directions). Restart the server with a pending request and confirm `request list` still shows it.
 
-## Milestone 4 — Stock economy engine (sell via right-click, no GUI yet)
+## Milestone 4 — Stock economy engine (sell via right-click, no GUI yet) (done)
 
 Implements the actual value math and stock storage, observable through the simplest interaction (right-click sells the whole held stack) before tackling GUI complexity.
 
+Simplification from the original plan: `StockData` is keyed by `Item` alone, not `ItemKey` (item + component patch) — since only default-component stacks are ever tradeable (see `ItemEligibility`), there's exactly one tradeable variant per item, so a composite key would carry a permutation this mod can never reach.
+
+Two bugs found and fixed after initial testing, both in `Config.java`/`ItemEligibility`:
+- `validateItemName` originally used `Identifier.parse()`, which *throws* on malformed input instead of returning false — a typo in `itemDenyList`/`itemAllowList` crashed config loading with a raw parser exception. Fixed to parse via `Identifier.tryParse()` first and log a specific, readable `LOGGER.error` (e.g. "not a valid item id" vs. "not a registered item") before deliberately throwing — the crash-on-bad-config behavior is intentional, it just needed a clear message ahead of it instead of a cryptic one.
+- `ItemEligibility`'s deny/allow-list check compared the item's fully-qualified id (`"minecraft:stick"`) against config entries as raw strings — but config stores entries verbatim as typed (`"stick"`, not normalized), so `"stick"` never matched and the deny list silently did nothing. Fixed by parsing each config entry to a canonical `Identifier` before comparing.
+
 **Files:**
-- `sh.leaflab.goods.economy.Currency` extended — `sellValue(stockBefore, qty)` / `buyCost(stockBefore, qty)` using `StrictMath.log1p` exactly as specified: sell = `log1p(k/(j+1.0)) / ln2`, buy = `-log1p(-k/(j+1.0)) / ln2`, with `ln2 = StrictMath.log(2.0)` as a `static final double`. Payouts round down, charges round up — round the fee-adjusted total **once**, not per intermediate step (getting this backwards reopens the wash-trading exploit the spec explicitly closes).
-- `sh.leaflab.goods.economy.StockData` — `Map<ItemKey, Long>`, 64-bit counters, saturating add (compare-sign-bits overflow check, clamp rather than throw/wrap).
-- `sh.leaflab.goods.economy.ItemEligibility` — shared validator: `getMaxStackSize() > 1`, component patch is empty (default state only — check via patch emptiness, not by enumerating individual component types, or a new component type later reopens the anvil-rename exploit), allow/deny-list config check.
-- `sh.leaflab.goods.economy.TradeService` — single `sell(ServerPlayer, ItemStack)` entry point, reused later by `SellSlot` (M5) and the buy packet handler (M6) — write once, don't reimplement.
-- `TradeHubBlock` interact handler now calls `TradeService.sell(...)` instead of the M1 placeholder.
-- `Config.java` gets its real settings: `CurrencyName`, `TransactionFeePercent` (0-100, buys only), `ItemDenyList`, `ItemAllowList` — replacing the remaining template values.
+- `sh.leaflab.goods.economy.Currency` extended — `sellRawValue`/`buyRawCost` (unrounded, using `StrictMath.log1p` per spec) plus `sellValue`/`buyCost` (rounded to fixed-point, floor/ceil respectively) and public `floorToFixedPoint`/`ceilToFixedPoint` so Milestone 6 can apply the transaction fee to the raw value before the one-time rounding step.
+- `sh.leaflab.goods.economy.StockData`/`Stock` — a second `SavedData`, structured like `EconomyData`/`Economy`, holding per-item stock counts with saturating add.
+- `sh.leaflab.goods.economy.ItemEligibility` — stackable + default-component-state + allow/deny-list config check.
+- `sh.leaflab.goods.economy.TradeService` — single `sell(ServerPlayer, ItemStack)` entry point, reused later by `SellSlot` (M5) and the buy packet handler (M6).
+- `TradeHubBlock` — interaction split into `useItemOn` (holding an item → sell it) and `useWithoutItem` (empty hand → the old placeholder message), rather than one combined handler.
+- `Config.java` real settings: `CurrencyName`, `TransactionFeePercent` (0-100, buys only), `ItemDenyList`, `ItemAllowList`.
 
-**Keep `Currency` free of server-only types** (`ServerLevel`, `SavedData`) so it's safely callable unmodified from client-side buy-preview code in M6.
-
-**Test:** sell a fresh item (`j=0`) and confirm payout matches `log1p(k/1)/ln2`, floor-rounded to 10 decimals. Sell more of the same item, confirm diminishing per-unit value. Try a renamed/enchanted item — rejected, stays in hand. Try a non-stackable item (shulker box) — rejected. Add an item to the deny-list via config, confirm new deposits rejected but existing stock can still be drained to 0. Restart the world, confirm stock persisted.
+**Verification:** the value-calculation math (`sellRawValue`/`buyRawCost`/rounding) was checked standalone outside the game — first sale into empty stock pays exactly `1.0000000000` (`log2(2)=1`), diminishing returns confirmed as stock grows, and a sell-then-buy-back round trip never nets a profit.
 
 ## Milestone 5 — Real GUI: Sell Slot + live balance sync
 

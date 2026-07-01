@@ -2,6 +2,8 @@
   "itemGroup.thegoods": "The Goods",
   "block.thegoods.trade_hub": "Trade Hub",
   "block.thegoods.trade_hub.interact": "Trade Hub — coming soon",
+  "block.thegoods.trade_hub.not_eligible": "That item can't be traded",
+  "block.thegoods.trade_hub.sold": "Sold %s %s for %s",
 
   "commands.thegoods.balance": "Your balance: %s",
   "commands.thegoods.give": "Gave %s to %s (new balance: %s)",
@@ -39,8 +41,8 @@
   "thegoods.configuration.title": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml.title": "The Goods Configs",
-  "thegoods.configuration.items": "Item List",
-  "thegoods.configuration.logDirtBlock": "Log Dirt Block",
-  "thegoods.configuration.magicNumberIntroduction": "Magic Number Text",
-  "thegoods.configuration.magicNumber": "Magic Number"
+  "thegoods.configuration.currencyName": "Currency Name",
+  "thegoods.configuration.transactionFeePercent": "Transaction Fee Percent",
+  "thegoods.configuration.itemDenyList": "Item Deny List",
+  "thegoods.configuration.itemAllowList": "Item Allow List"
 }

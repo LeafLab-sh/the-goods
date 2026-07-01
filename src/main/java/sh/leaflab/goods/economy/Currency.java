@@ -9,7 +9,50 @@ import java.math.BigDecimal;
 public final class Currency {
     public static final long SCALE = 10_000_000_000L;
 
+    // StrictMath (not Math) is mandatory here: this value mints/destroys persisted currency, so it must be
+    // bit-identical across JVMs/platforms. Math.log1p is permitted to use platform intrinsics; StrictMath isn't.
+    private static final double LN2 = StrictMath.log(2.0);
+
     private Currency() {
+    }
+
+    /**
+     * Value gained by selling {@code quantity} more into a stock of {@code stockBefore}, in real (unscaled)
+     * currency units. Computed via a single log1p call to avoid catastrophic cancellation at large stock — see
+     * {@link #buyRawCost}.
+     */
+    public static double sellRawValue(long stockBefore, long quantity) {
+        return StrictMath.log1p(quantity / (stockBefore + 1.0)) / LN2;
+    }
+
+    /** Cost to buy {@code quantity} out of a stock of {@code stockBefore}, in real (unscaled) currency units. */
+    public static double buyRawCost(long stockBefore, long quantity) {
+        return -StrictMath.log1p(-quantity / (stockBefore + 1.0)) / LN2;
+    }
+
+    /** Sell payout as fixed-point units, floor-rounded (a sale can pay 0, never a fraction of a unit). */
+    public static long sellValue(long stockBefore, long quantity) {
+        return floorToFixedPoint(sellRawValue(stockBefore, quantity));
+    }
+
+    /** Buy cost as fixed-point units, ceil-rounded (a purchase can never cost 0 if it costs anything at all). */
+    public static long buyCost(long stockBefore, long quantity) {
+        return ceilToFixedPoint(buyRawCost(stockBefore, quantity));
+    }
+
+    /**
+     * Converts a raw (unscaled) currency amount to fixed-point units, rounding down. Exposed so callers that need
+     * to apply something (like a transaction fee) to a raw value before rounding — the value must be rounded once,
+     * at the very end, not rounded and then adjusted, or the wash-trading exploit this rounding policy exists to
+     * close reopens.
+     */
+    public static long floorToFixedPoint(double rawValue) {
+        return (long) StrictMath.floor(rawValue * SCALE);
+    }
+
+    /** @see #floorToFixedPoint */
+    public static long ceilToFixedPoint(double rawValue) {
+        return (long) StrictMath.ceil(rawValue * SCALE);
     }
 
     /** Parses a decimal string into fixed-point units. Rejects more than 10 fractional digits. */
