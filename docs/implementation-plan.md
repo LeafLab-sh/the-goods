@@ -14,7 +14,7 @@ Reference mods are named throughout for patterns the spec itself invokes (e.g. t
 - `CLAUDE.md`: removed a stray standalone `upda` line between the `docs/spec.md` reference and the `## Commands` header.
 - Verified: `./gradlew build` succeeds.
 
-## Milestone 1 — Trade Hub block: craftable, placeable, breakable
+## Milestone 1 — Trade Hub block: craftable, placeable, breakable (done)
 
 Replace the example block/item scaffolding with a real Trade Hub block. No economy logic yet — right-click just sends a placeholder chat message. This is a low-risk repeat of the registration pattern already in `TheGoods.java`, good for building confidence before harder milestones.
 
@@ -27,7 +27,7 @@ Replace the example block/item scaffolding with a real Trade Hub block. No econo
 
 **NeoForge concepts:** `DeferredRegister`/`DeferredHolder` (repeat from template), `BlockBehaviour.Properties`, `GatherDataEvent`, `BlockStateProvider`/`RecipeProvider`/`LootTableProvider`, `ExistingFileHelper`, `CreativeModeTab` display items.
 
-**Test:** `./gradlew runData`, inspect generated JSON under `src/generated/resources/`. Then `./gradlew runClient`: find the Trade Hub in its creative tab, place it, right-click for the chat message, break it in survival and confirm self-drop, craft one via the stick-ring recipe at a crafting table.
+**Test:** `./gradlew runData runDataServer` (both — client datagen makes the model/blockstate, server datagen makes the recipe/loot table; they write to separate directories, see `CLAUDE.md`), inspect generated JSON under `src/generated/resources/` and `src/generated/serverData/`. Then `./gradlew runClient`: find the Trade Hub in its creative tab, place it, right-click for the chat message, break it in survival and confirm self-drop, craft one via the stick-ring recipe at a crafting table.
 
 ## Milestone 2 — Persistent balances + admin commands
 

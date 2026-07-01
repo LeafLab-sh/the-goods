@@ -31,7 +31,11 @@ how many are in stock.
 ./gradlew build              # Build the mod JAR (output: build/libs/)
 ./gradlew runClient          # Launch Minecraft client with the mod loaded
 ./gradlew runServer          # Launch dedicated server (no GUI)
-./gradlew runData            # Run data generators → src/generated/resources/
+./gradlew runData            # Run client-side data generators (block/item models) → src/generated/resources/
+./gradlew runDataServer      # Run server-side data generators (recipes, loot tables) → src/generated/serverData/
+                              # Run BOTH after adding/changing blocks, items, recipes, or loot tables — client and
+                              # server datagen are separate MC processes with separate output dirs on purpose; see
+                              # the sourceSets.main.resources comment in build.gradle for why.
 ./gradlew runGameTestServer  # Run game tests, then exit
 ./gradlew --refresh-dependencies  # Clear and re-download all deps
 ./gradlew clean              # Delete build outputs (does not affect src/)
@@ -59,8 +63,9 @@ canonical pattern.
 ### Resource generation
 - `src/main/templates/` — template files with `${property}` placeholders; expanded by the `generateModMetadata` Gradle
 task into `build/generated/sources/modMetadata/`. The `neoforge.mods.toml` lives here.
-- `src/generated/resources/` — output of data generators (`runData`). Committed to source control and included in the
-build automatically.
+- `src/generated/resources/` (client datagen, `runData`) and `src/generated/serverData/` (server datagen,
+`runDataServer`) — output of the data generators, merged into one resource tree by `sourceSets.main.resources` in
+`build.gradle`. Both committed to source control and included in the build automatically.
 - `src/main/resources/assets/thegoods/lang/en_us.json` — all user-visible strings, including config screen labels.
 
 ### Config

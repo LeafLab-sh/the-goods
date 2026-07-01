@@ -1,7 +1,7 @@
 {
-  "itemGroup.thegoods": "Example Mod Tab",
-  "block.thegoods.example_block": "Example Block",
-  "item.thegoods.example_item": "Example Item",
+  "itemGroup.thegoods": "The Goods",
+  "block.thegoods.trade_hub": "Trade Hub",
+  "block.thegoods.trade_hub.interact": "Trade Hub — coming soon",
 
   "thegoods.configuration.title": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml": "The Goods Configs",
