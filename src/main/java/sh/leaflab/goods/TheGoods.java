@@ -25,6 +25,8 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import sh.leaflab.goods.block.TradeHubBlock;
 import sh.leaflab.goods.command.GoodsCommand;
 import sh.leaflab.goods.datagen.DataGenerators;
+import sh.leaflab.goods.network.NetworkHandler;
+import sh.leaflab.goods.registry.ModMenuTypes;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(TheGoods.MODID)
@@ -66,6 +68,9 @@ public class TheGoods {
         // Register the Deferred Register to the mod event bus so tabs get registered
         CREATIVE_MODE_TABS.register(modEventBus);
 
+        // Register the Deferred Register to the mod event bus so menu types get registered
+        ModMenuTypes.MENU_TYPES.register(modEventBus);
+
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (TheGoods) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
@@ -77,6 +82,9 @@ public class TheGoods {
         // Register the data generators (block/item models, recipes, loot tables) for `./gradlew runData`
         modEventBus.addListener(DataGenerators::gatherClientData);
         modEventBus.addListener(DataGenerators::gatherServerData);
+
+        // Register networking payloads (e.g. balance sync while a Trade Hub menu is open)
+        modEventBus.addListener(NetworkHandler::register);
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);

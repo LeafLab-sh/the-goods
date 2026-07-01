@@ -87,18 +87,24 @@ Two bugs found and fixed after initial testing, both in `Config.java`/`ItemEligi
 
 **Verification:** the value-calculation math (`sellRawValue`/`buyRawCost`/rounding) was checked standalone outside the game — first sale into empty stock pays exactly `1.0000000000` (`log2(2)=1`), diminishing returns confirmed as stock grows, and a sell-then-buy-back round trip never nets a profit.
 
-## Milestone 5 — Real GUI: Sell Slot + live balance sync
+## Milestone 5 — Real GUI: Sell Slot + live balance sync (done)
 
 First custom `AbstractContainerMenu`/`AbstractContainerScreen`, first custom networking packet, first `Slot` subclass. The M4 right-click-to-sell behavior is retired in favor of opening this menu.
 
-**Files:**
-- `sh.leaflab.goods.menu.TradeHubMenu` (extends `AbstractContainerMenu`) — one `SellSlot` + vanilla player inventory. `MenuType` registered via a `sh.leaflab.goods.registry.ModMenuTypes` `DeferredRegister`.
-- `sh.leaflab.goods.menu.SellSlot` (extends `Slot`) — `mayPlace` calls `ItemEligibility`; processes on **insert** (verify exact hook — `mayPlace`+`setChanged` vs. `onTake` vs. `set`/`setByPlayer` override — picking the wrong one is a common source of "shift-click doesn't repeat" bugs), then empties itself so repeated shift-clicks work. Test shift-click specifically — it routes through `AbstractContainerMenu#quickMoveStack`, a separate path from drag-and-drop.
-- `sh.leaflab.goods.client.gui.TradeHubScreen` (extends `AbstractContainerScreen<TradeHubMenu>`) — sell slot, inventory, balance readout. Registered via `MenuScreens.register` in `TheGoodsClient`.
-- `sh.leaflab.goods.network.BalanceSyncPayload` + `sh.leaflab.goods.network.NetworkHandler` — `CustomPacketPayload`/`StreamCodec` via `RegisterPayloadHandlersEvent` (verify exact 26.2 event/registrar shape — this API has had naming churn). Sent server→client on balance change while menu is open.
-- `TradeHubBlock` interact handler now opens the menu instead of selling directly.
+Two APIs turned out to have changed significantly from what most tutorials assume, found by reading actual vanilla source rather than guessing:
+- The classic `render`/`renderBg` screen-drawing methods are gone, replaced by a `GuiGraphicsExtractor`-based "extract render state" architecture — the real hooks to override are `extractBackground` (background) and `extractLabels` (text), confirmed by reading `InventoryScreen`'s own implementation.
+- `MenuScreens.register(...)` — the method most tutorials tell you to call — is now `private` and `@Deprecated`. Registration now happens via the `RegisterMenuScreensEvent` client event instead, wired up in `TheGoodsClient`.
 
-**Test:** right-click Trade Hub, screen opens with empty sell slot + balance label matching `/goods balance`. Drag an eligible stack into the slot — processes immediately, slot empties, balance updates on-screen without closing/reopening (proves the sync packet works). Shift-click a stack, confirm each click sells one increment (not batched). Try an ineligible item — stays put. Close mid-drag with a staged cursor item — normal vanilla cursor-return behavior.
+No real GUI texture yet — `TradeHubScreen` draws a plain-color panel and hand-drawn beveled slot wells (three overlapping `fill()` calls approximating vanilla's sunken-slot look) instead of blitting a texture, the same "placeholder now, easy to swap later" approach as the Milestone 1 block texture. Colors were tuned after initial testing to actually resemble vanilla's stone-gray look (dark text on a light panel) — the first pass used a near-black panel with white text and the slots were invisible except on hover.
+
+`SellSlot.mayPlace` also fires from `Slot#allowModification`, which calls `mayPlace(this.getItem())` — since the Sell Slot's backing item is always empty (it never actually stores anything), that path had to be excluded explicitly or an unrelated internal check would spuriously report "can't trade" against nothing every time it ran.
+
+**Files:**
+- `sh.leaflab.goods.menu.TradeHubMenu` (extends `AbstractContainerMenu`) — one `SellSlot` + vanilla player inventory (via the built-in `addStandardInventorySlots` helper). `MenuType` registered via `sh.leaflab.goods.registry.ModMenuTypes`.
+- `sh.leaflab.goods.menu.SellSlot` (extends `Slot`) — `mayPlace` calls `ItemEligibility` (and messages the player on rejection, excluding the empty-stack case); `setByPlayer` is the insert hook — the underlying container slot is never actually written to, so it's always empty and every insert (drag-drop or shift-click, both route through `setByPlayer`) repeats cleanly.
+- `sh.leaflab.goods.client.gui.TradeHubScreen` (extends `AbstractContainerScreen<TradeHubMenu>`) — sell slot, inventory, live balance readout top-right.
+- `sh.leaflab.goods.network.BalanceSyncPayload` + `sh.leaflab.goods.network.NetworkHandler` — registered via `RegisterPayloadHandlersEvent`; sent server→client from `TradeHubMenu#broadcastChanges` whenever the owning player's balance changes while the menu is open.
+- `TradeHubBlock` interact handler now opens the menu instead of selling directly — `useItemOn` was removed entirely, since selling now happens through the Sell Slot, not by right-clicking with an item in hand.
 
 ## Milestone 6 — Catalog widget + full buying flow
 
