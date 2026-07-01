@@ -29,9 +29,11 @@ Replace the example block/item scaffolding with a real Trade Hub block. No econo
 
 **Test:** `./gradlew runData runDataServer` (both — client datagen makes the model/blockstate, server datagen makes the recipe/loot table; they write to separate directories, see `CLAUDE.md`), inspect generated JSON under `src/generated/resources/` and `src/generated/serverData/`. Then `./gradlew runClient`: find the Trade Hub in its creative tab, place it, right-click for the chat message, break it in survival and confirm self-drop, craft one via the stick-ring recipe at a crafting table.
 
-## Milestone 2 — Persistent balances + admin commands
+## Milestone 2 — Persistent balances + admin commands (done)
 
 First `SavedData` usage, first Brigadier command tree, first real persistence test.
+
+Two APIs turned out to have changed since older tutorials/mods: `SavedData` no longer has `save`/`load` methods at all — serialization is now a `Codec<T>` carried by a separate `SavedDataType<T>` record (see `EconomyData`, patterned on vanilla's `WeatherData`). And the old integer op-levels (0-4, `source.hasPermission(4)`) are gone, replaced by named tiers (`Commands.hasPermission(Commands.LEVEL_OWNERS)`, etc. — see `GoodsCommand`). `give`/`take`/`reset` currently only resolve online players (`EntityArgument.player()`); offline-capable name resolution is deferred to Milestone 3, where the spec requires it for `pay`/`request` anyway.
 
 **Files:**
 - `sh.leaflab.goods.economy.Currency` — fixed-point representation: a `long` counting units of `10^-10` (`SCALE = 10_000_000_000L`), matching the spec's own "~±922M headroom" note (`Long.MAX_VALUE / 1e10 ≈ 922,337,203.68`). Full-precision display must build the string via integer division/modulo, never round-trip through `double`.

@@ -26,6 +26,7 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import sh.leaflab.goods.block.TradeHubBlock;
+import sh.leaflab.goods.command.GoodsCommand;
 import sh.leaflab.goods.datagen.DataGenerators;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -75,6 +76,9 @@ public class TheGoods {
         // Note that this is necessary if and only if we want *this* class (TheGoods) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
         NeoForge.EVENT_BUS.register(this);
+
+        // Register the /goods command tree
+        NeoForge.EVENT_BUS.addListener(GoodsCommand::register);
 
         // Register the data generators (block/item models, recipes, loot tables) for `./gradlew runData`
         modEventBus.addListener(DataGenerators::gatherClientData);

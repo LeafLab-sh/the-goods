@@ -3,6 +3,13 @@
   "block.thegoods.trade_hub": "Trade Hub",
   "block.thegoods.trade_hub.interact": "Trade Hub — coming soon",
 
+  "commands.thegoods.balance": "Your balance: %s",
+  "commands.thegoods.give": "Gave %s to %s (new balance: %s)",
+  "commands.thegoods.take": "Took %s from %s (new balance: %s)",
+  "commands.thegoods.reset": "Reset %s's balance to 0",
+  "commands.thegoods.invalid_amount": "Invalid amount: %s",
+  "commands.thegoods.amount_not_positive": "Amount must be positive",
+
   "thegoods.configuration.title": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml.title": "The Goods Configs",
