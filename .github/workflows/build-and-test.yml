@@ -1,9 +1,9 @@
-name: Build
+name: Check
 
 on: [push, pull_request]
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
