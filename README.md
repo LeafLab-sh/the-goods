@@ -1,5 +1,7 @@
 # The Goods
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B4N622FRUD)
+
 **A player-driven economy where prices are set by what's actually in stock — not a fixed price list.**
 
 Every item has a value that rises and falls with how much of it the server has traded in. Flood the market with cobblestone and its price craters; keep a rare item scarce and it stays valuable. There's no admin-authored price list to maintain — the economy prices itself.
