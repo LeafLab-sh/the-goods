@@ -3,6 +3,7 @@ plugins {
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.141'
     id 'idea'
+    id 'com.diffplug.spotless' version '8.8.0'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -32,7 +33,8 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    // JUnit isn't on whatever repos net.neoforged.moddev injects internally for Minecraft/NeoForge artifacts.
+    mavenCentral()
 }
 
 base {
@@ -163,6 +165,46 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+    // src/test/java unit tests — for pure logic with no Minecraft/NeoForge dependencies (e.g. Currency).
+    // net.neoforged.moddev only binds sourceSets.main into the modded userdev environment (see the mods {} block
+    // below), so this test source set runs as a completely ordinary, unmodified Gradle `test` task.
+    testImplementation platform('org.junit:junit-bom:6.1.1')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+
+    // Gradle's default is a single terse pass/fail summary line, with details only in the HTML report — no use
+    // in CI, where nobody's going to open that report. Print every test's outcome and any captured
+    // stdout/stderr directly to the console instead, so a CI log alone is enough to see what happened.
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+        showStandardStreams = true
+    }
+}
+
+// Housekeeping only — import order, unused imports, whitespace — not a full reformat. The codebase already has a
+// consistent, deliberate manual style; running a full formatter (googleJavaFormat/palantirJavaFormat) over it
+// would produce a one-time diff touching every file for no real benefit.
+spotless {
+    java {
+        target 'src/*/java/**/*.java' // src/main/java and src/test/java
+
+        // Matches this project's actual import convention (confirmed across every package): java.* first, then
+        // third-party (com.mojang.*, io.netty.*, ...), then net.minecraft.*/net.neoforged.* merged into one
+        // alphabetically-sorted block (not two separate groups), then sh.leaflab.goods.*, then static imports
+        // last. Spotless's default (no '\#' marker) is to pull ALL static imports into an implicit leading
+        // group instead — the opposite of this project's actual convention — so the trailing '\#' is required,
+        // not just for clarity.
+        importOrder('java', '', 'net.minecraft|net.neoforged', 'sh.leaflab.goods', '\\#')
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

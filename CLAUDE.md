@@ -37,11 +37,16 @@ how many are in stock.
                               # server datagen are separate MC processes with separate output dirs on purpose; see
                               # the sourceSets.main.resources comment in build.gradle for why.
 ./gradlew runGameTestServer  # Run game tests, then exit
+./gradlew test                # Run JUnit unit tests (pure logic only, no Minecraft deps)
+./gradlew spotlessCheck       # Check import order / unused imports / whitespace (runs as part of build)
+./gradlew spotlessApply       # Auto-fix the above
 ./gradlew --refresh-dependencies  # Clear and re-download all deps
-./gradlew clean              # Delete build outputs (does not affect src/)
+./gradlew clean               # Delete build outputs (does not affect src/)
 ```
 
-There is no unit test runner — gameplay tests use `runGameTestServer`.
+Pure logic with no Minecraft/NeoForge dependencies (e.g. `Currency`) has JUnit 5 unit tests under
+`src/test/java`, run via `./gradlew test`. Anything touching `MinecraftServer`/`ServerLevel`/`SavedData`/item
+registries is only testable via GameTest (`runGameTestServer`).
 
 ## Architecture
 

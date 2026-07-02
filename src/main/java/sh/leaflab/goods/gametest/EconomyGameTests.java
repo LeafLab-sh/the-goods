@@ -33,12 +33,12 @@ import sh.leaflab.goods.economy.TradeService;
 import sh.leaflab.goods.menu.TradeHubMenu;
 import sh.leaflab.goods.network.CatalogEntry;
 
-// Automated coverage for docs/spec.md's own enumerated test-plan bullets — this project has no unit test runner
-// (per CLAUDE.md), so these run via `./gradlew runGameTestServer` instead. All of it is server-side economy
-// logic (currency math, stock counters, SavedData, TradeService), so every test uses the "empty" vanilla
-// structure and a no-op environment rather than placing any real blocks. Each test uses its own dedicated vanilla
-// item, never reused across tests, since Stock/Economy SavedData is server-wide (not per-structure) and multiple
-// tests can run concurrently in the same ServerLevel within a batch.
+// Automated coverage for docs/spec.md's own enumerated test-plan bullets, for the subset that needs a live
+// MinecraftServer/ServerLevel/SavedData/item registry — see CLAUDE.md. Pure logic (e.g. Currency) has real
+// JUnit unit tests under src/test/java instead; GameTest is for everything that can't run there. Every test
+// uses the "empty" vanilla structure and a no-op environment rather than placing any real blocks. Each test
+// uses its own dedicated vanilla item, never reused across tests, since Stock/Economy SavedData is server-wide
+// (not per-structure) and multiple tests can run concurrently in the same ServerLevel within a batch.
 public final class EconomyGameTests {
     public static final DeferredRegister<Consumer<GameTestHelper>> TEST_FUNCTIONS =
             DeferredRegister.create(BuiltInRegistries.TEST_FUNCTION, TheGoods.MODID);
@@ -62,8 +62,6 @@ public final class EconomyGameTests {
             register("forged_quote_hash_rejected", EconomyGameTests::forgedQuoteHashRejected);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> INVALID_QUANTITY_REJECTED_BEFORE_PRICING =
             register("invalid_quantity_rejected_before_pricing", EconomyGameTests::invalidQuantityRejectedBeforePricing);
-    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> FEE_BOUNDARIES_ZERO_AND_HUNDRED_PERCENT =
-            register("fee_boundaries_zero_and_hundred_percent", EconomyGameTests::feeBoundariesZeroAndHundredPercent);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS =
             register("catalog_excludes_zero_stock_and_sorts", EconomyGameTests::catalogExcludesZeroStockAndSorts);
 
@@ -77,7 +75,7 @@ public final class EconomyGameTests {
         for (DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> test : List.of(
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
-                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, FEE_BOUNDARIES_ZERO_AND_HUNDRED_PERCENT, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS)) {
+                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -224,21 +222,6 @@ public final class EconomyGameTests {
         helper.assertTrue(outcome.messageKey().equals("commands.thegoods.buy.invalid_quantity"), "should fail specifically on the invalid-quantity check, before any pricing math");
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == balanceBefore, "balance should be untouched — pricing math never ran");
         helper.assertTrue(Stock.getStock(server, item) == stockBefore, "stock should be untouched");
-        helper.succeed();
-    }
-
-    private static void feeBoundariesZeroAndHundredPercent(GameTestHelper helper) {
-        long stock = 10;
-        long quantity = 3;
-
-        long noFeeCost = Currency.buyCost(stock, quantity);
-        long zeroFeeCost = Currency.buyCostWithFee(stock, quantity, 0);
-        helper.assertTrue(zeroFeeCost == noFeeCost, "0% fee should exactly match the no-fee cost");
-
-        double rawCost = Currency.buyRawCost(stock, quantity);
-        long expectedFullFeeCost = Currency.ceilToFixedPoint(rawCost * 2.0);
-        long fullFeeCost = Currency.buyCostWithFee(stock, quantity, 100);
-        helper.assertTrue(fullFeeCost == expectedFullFeeCost, "100% fee should double the raw cost before the single ceil-rounding step");
         helper.succeed();
     }
 
