@@ -3,10 +3,7 @@ name: Release
 # Pushing a semver tag (e.g. v1.2.3) is the single source of truth for a release's version — the tag drives the
 # build (mod_version is overridden to match it, see the Build step below), so there's never a chance of the
 # release jar disagreeing with the tag it was published under.
-#
-# Every action below is pinned to a commit SHA rather than a mutable version tag — the norm for every workflow in
-# this repo. It matters most here: this workflow carries contents: write permission, so a compromised tag update
-# on any of these would otherwise get that same permission for free.
+
 on:
   push:
     tags:
@@ -52,3 +49,12 @@ jobs:
             build/libs/*.jar \
             --title "${{ github.ref_name }}" \
             --generate-notes
+
+      # Runs after the GitHub Release exists so it can reuse that release's title/changelog for CurseForge too.
+      # loaders/game-versions/dependencies are read automatically from the jar's own neoforge.mods.toml — no
+      # need to duplicate them here (see https://github.com/Kira-NT/mc-publish#-inputs for what's auto-resolved).
+      - name: Publish to CurseForge
+        uses: Kira-NT/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3.0
+        with:
+          curseforge-id: 1595080
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
