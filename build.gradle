@@ -36,7 +36,10 @@ repositories {
 }
 
 base {
-    archivesName = mod_id
+    // Produces thegoods-neoforge-<minecraft_version>-<mod_version>.jar — the release workflow overrides
+    // mod_version at build time (-Pmod_version=...) to match the pushed git tag, so a release's jar name always
+    // agrees exactly with the tag it came from.
+    archivesName = "${mod_id}-neoforge-${minecraft_version}"
 }
 
 // Mojang ships Java 25 to end users in 26.2, so mods should target Java 25.
