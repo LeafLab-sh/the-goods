@@ -37,18 +37,23 @@ public class TradeHubMenu extends AbstractContainerMenu {
     private CatalogResultPayload clientCatalogResult;
     private BuyResultPayload clientLastBuyResult;
 
-    // Layout constants shared with TradeHubScreen/CatalogWidget/BuyDialog: the catalog grid occupies (8,42)
-    // through roughly (134,114), the Sell Slot sits to its right, and the Buy Dialog strip runs below the
-    // catalog's Prev/Next row (y=136-176) before the player inventory starts.
-    public static final int SELL_SLOT_X = 160;
-    public static final int SELL_SLOT_Y = 42;
+    // Layout constants shared with TradeHubScreen/CatalogWidget/BuyDialog: the catalog grid (9x4, 18px cells)
+    // occupies (8,26) through (170,98) with a scrollbar at x=172-184 — the screen's full width is sized to just
+    // fit that. Below the grid, the middle section (y=102-190) is split left/right by a vertical divider at
+    // x=96: Sell heading + Sell Slot + balance on the left, the Buy interface on the right. Player inventory
+    // follows after that.
+    // Centered under the Sell heading within the left column (x=8 to the divider at x=96): center is (8+96)/2=52,
+    // minus half the 18px slot width.
+    public static final int SELL_SLOT_X = 43;
+    public static final int SELL_SLOT_Y = 112;
+    public static final int PLAYER_INVENTORY_Y = 192;
 
     public TradeHubMenu(int containerId, Inventory playerInventory) {
         super(ModMenuTypes.TRADE_HUB.get(), containerId);
         this.serverPlayerOwner = playerInventory.player instanceof ServerPlayer serverPlayer ? serverPlayer : null;
 
         this.addSlot(new SellSlot(sellContainer, 0, SELL_SLOT_X, SELL_SLOT_Y, playerInventory.player));
-        this.addStandardInventorySlots(playerInventory, 8, 182);
+        this.addStandardInventorySlots(playerInventory, 8, PLAYER_INVENTORY_Y);
     }
 
     @Override
@@ -120,10 +125,9 @@ public class TradeHubMenu extends AbstractContainerMenu {
 
     private void sendCatalogResult(CatalogQueryPayload query) {
         MinecraftServer server = serverPlayerOwner.level().getServer();
-        TradeService.CatalogPage page = TradeService.queryCatalog(server, query.search(), query.sortKey(), query.ascending(), query.page());
+        var entries = TradeService.queryCatalog(server, query.search(), query.sortKey(), query.ascending());
         int feePercent = Config.TRANSACTION_FEE_PERCENT.get();
-        PacketDistributor.sendToPlayer(
-                serverPlayerOwner, new CatalogResultPayload(page.entries(), page.page(), page.totalPages(), feePercent));
+        PacketDistributor.sendToPlayer(serverPlayerOwner, new CatalogResultPayload(entries, feePercent));
     }
 
     public long getClientBalance() {

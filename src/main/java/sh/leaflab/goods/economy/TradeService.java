@@ -21,8 +21,6 @@ import sh.leaflab.goods.network.CatalogEntry;
 // The single entry point for both trade directions — reused by the Sell Slot GUI (Milestone 5) and the catalog
 // buy packet handler (Milestone 6), so the eligibility/value/persistence logic is written once, not per surface.
 public final class TradeService {
-    private static final int CATALOG_PAGE_SIZE = 28;
-
     private TradeService() {
     }
 
@@ -108,7 +106,11 @@ public final class TradeService {
         return BuyOutcome.failure(messageKey);
     }
 
-    public static CatalogPage queryCatalog(MinecraftServer server, String search, String sortKey, boolean ascending, int page) {
+    // Returns the full filtered+sorted result set rather than a page — the client holds it and scrolls locally
+    // (see CatalogWidget), matching Refined Storage's client-side grid scrolling instead of requesting a new page
+    // per scroll tick. Re-sent whenever search/sort changes or the stock epoch advances (TradeHubMenu), not per
+    // frame, so this isn't on any hot path.
+    public static List<CatalogEntry> queryCatalog(MinecraftServer server, String search, String sortKey, boolean ascending) {
         Map<Item, Long> stock = Stock.positiveStock(server);
         long epoch = Stock.getEpoch(server);
         String needle = search.toLowerCase(Locale.ROOT);
@@ -127,19 +129,12 @@ public final class TradeService {
         };
         filtered.sort(ascending ? comparator : comparator.reversed());
 
-        int totalPages = Math.max(1, (filtered.size() + CATALOG_PAGE_SIZE - 1) / CATALOG_PAGE_SIZE);
-        int clampedPage = Math.max(0, Math.min(page, totalPages - 1));
-
-        List<CatalogEntry> entries = new ArrayList<>();
-        int start = clampedPage * CATALOG_PAGE_SIZE;
-        int end = Math.min(start + CATALOG_PAGE_SIZE, filtered.size());
-        for (int i = start; i < end; i++) {
-            Map.Entry<Item, Long> entry = filtered.get(i);
+        List<CatalogEntry> entries = new ArrayList<>(filtered.size());
+        for (Map.Entry<Item, Long> entry : filtered) {
             Identifier id = BuiltInRegistries.ITEM.getKey(entry.getKey());
             entries.add(new CatalogEntry(id, entry.getValue(), QuoteHash.of(id, entry.getValue(), epoch)));
         }
-
-        return new CatalogPage(entries, clampedPage, totalPages);
+        return entries;
     }
 
     private static String itemDisplayName(Item item) {
@@ -171,8 +166,5 @@ public final class TradeService {
         public static BuyOutcome failure(String messageKey) {
             return new BuyOutcome(false, messageKey);
         }
-    }
-
-    public record CatalogPage(List<CatalogEntry> entries, int page, int totalPages) {
     }
 }

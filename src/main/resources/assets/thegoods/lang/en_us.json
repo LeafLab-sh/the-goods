@@ -5,9 +5,17 @@
   "block.thegoods.trade_hub.sold": "Sold %s %s for %s",
   "block.thegoods.trade_hub.bought": "Bought %s %s for %s",
 
+  "gui.thegoods.trade_hub.sell_heading": "Sell",
+
   "gui.thegoods.catalog.search": "Search",
+  "gui.thegoods.catalog.sort_type.name": "Sort: Name",
+  "gui.thegoods.catalog.sort_type.price": "Sort: Price",
+  "gui.thegoods.catalog.sort_type.stock": "Sort: Stock",
+  "gui.thegoods.catalog.sort_direction.ascending": "Ascending",
+  "gui.thegoods.catalog.sort_direction.descending": "Descending",
   "gui.thegoods.buy.max": "Max",
   "gui.thegoods.buy.confirm": "Confirm",
+  "gui.thegoods.buy.no_selection": "Select an item to buy",
 
   "commands.thegoods.buy.success": "Purchase complete",
   "commands.thegoods.buy.invalid_quantity": "Invalid quantity",
