@@ -4,6 +4,8 @@
 
 Every item has a value that rises and falls with how much of it the server has traded in. Flood the market with cobblestone and its price craters; keep a rare item scarce and it stays valuable. There's no admin-authored price list to maintain — the economy prices itself.
 
+This mod was inspired by a guild concept in [A Tale in The Desert](https://www.desert-nomad.com/), an MMORPG which I played over 15 years ago.
+
 ## How it works
 
 Sell an item at the **Trade Hub** and it goes into the server's shared stock. The more of an item that's already in stock, the less each additional unit is worth — a logarithmic curve, so payouts taper off smoothly instead of cratering to zero or staying flat forever. Buying an item pulls it back out of stock and pushes the price for the *next* buyer back up. Selling something and immediately buying it back always costs you more than you got paid, so there's no free-money loop to exploit.

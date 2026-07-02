@@ -78,6 +78,7 @@ Project design docs (block/economy design, value-curve formulas, GUI layout) liv
 
 ## Credits
 
+This mod was inspired by a guild concept in [A Tale in The Desert](https://www.desert-nomad.com/), an MMORPG which I played over 15 years ago.
 The catalog/scrollbar/side-button sprites in the Buy screen are imported from [Refined Storage 2](https://github.com/refinedmods/refinedstorage2) (MIT license) — see [`REFINEDSTORAGE2_LICENSE.txt`](REFINEDSTORAGE2_LICENSE.txt) for the full attribution and license text.
 
 ## License
