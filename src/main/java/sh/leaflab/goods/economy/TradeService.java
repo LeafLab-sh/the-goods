@@ -85,7 +85,15 @@ public final class TradeService {
             return fail(player, "commands.thegoods.buy.inventory_full");
         }
 
+        // The fee portion is the difference between what was actually charged and what a 0%-fee purchase of the
+        // same quantity at the same stock level would have cost — both ceil-rounded independently, but that's
+        // fine here since this is a lifetime reporting counter (/goods metrics), not itself a transacted amount.
+        long feeCollected = cost - Currency.buyCost(stockBefore, quantity);
+
         Economy.take(server, player.getUUID(), cost);
+        if (feeCollected > 0) {
+            Economy.addLifetimeFees(server, feeCollected);
+        }
         Stock.debit(server, item, quantity);
 
         long remaining = quantity;

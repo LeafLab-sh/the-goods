@@ -19,6 +19,8 @@ import sh.leaflab.goods.network.BuyRequestPayload;
 import sh.leaflab.goods.network.BuyResultPayload;
 import sh.leaflab.goods.network.CatalogQueryPayload;
 import sh.leaflab.goods.network.CatalogResultPayload;
+import sh.leaflab.goods.network.SellDecisionPayload;
+import sh.leaflab.goods.network.SellPreviewPayload;
 import sh.leaflab.goods.registry.ModMenuTypes;
 
 public class TradeHubMenu extends AbstractContainerMenu {
@@ -37,6 +39,13 @@ public class TradeHubMenu extends AbstractContainerMenu {
     private CatalogResultPayload clientCatalogResult;
     private BuyResultPayload clientLastBuyResult;
 
+    // Per-player, per-session Sell Dialog toggle (see SellSlot) — a UI preference, not persisted across menu
+    // opens. Long.MIN_VALUE so the first item ever staged always sends its preview even if the coincidental
+    // stock value would otherwise match a stale default.
+    private boolean sellDialogEnabled;
+    private long lastSyncedSellStock = Long.MIN_VALUE;
+    private long clientSellPreviewStock;
+
     // Layout constants shared with TradeHubScreen/CatalogWidget/BuyDialog: the catalog grid (9x4, 18px cells)
     // occupies (8,26) through (170,98) with a scrollbar at x=172-184 — the screen's full width is sized to just
     // fit that. Below the grid, the middle section (y=102-190) is split left/right by a vertical divider at
@@ -52,7 +61,7 @@ public class TradeHubMenu extends AbstractContainerMenu {
         super(ModMenuTypes.TRADE_HUB.get(), containerId);
         this.serverPlayerOwner = playerInventory.player instanceof ServerPlayer serverPlayer ? serverPlayer : null;
 
-        this.addSlot(new SellSlot(sellContainer, 0, SELL_SLOT_X, SELL_SLOT_Y, playerInventory.player));
+        this.addSlot(new SellSlot(sellContainer, 0, SELL_SLOT_X, SELL_SLOT_Y, playerInventory.player, this::isSellDialogEnabled));
         this.addStandardInventorySlots(playerInventory, 8, PLAYER_INVENTORY_Y);
     }
 
@@ -80,6 +89,12 @@ public class TradeHubMenu extends AbstractContainerMenu {
         return true;
     }
 
+    /** Whatever is currently staged in the Sell Slot (Sell Dialog mode) — empty under Quick Sell. Works
+     * client-side too, since Slot contents are synced to the client via vanilla's normal menu mechanics. */
+    public ItemStack getStagedSellItem() {
+        return this.slots.get(SELL_SLOT_INDEX).getItem();
+    }
+
     // Pushes the player's balance to their client whenever it changes while this menu is open, and re-answers the
     // client's last catalog query whenever stock changes — both piggyback on broadcastChanges() already running
     // once per server tick for every open menu, so both are naturally coalesced across a tick's worth of trades.
@@ -103,6 +118,71 @@ public class TradeHubMenu extends AbstractContainerMenu {
                 lastSyncedStockEpoch = currentEpoch;
                 sendCatalogResult(lastCatalogQuery);
             }
+        }
+
+        ItemStack staged = sellContainer.getItem(0);
+        if (sellDialogEnabled && !staged.isEmpty()) {
+            long currentStock = Stock.getStock(server, staged.getItem());
+            if (currentStock != lastSyncedSellStock) {
+                lastSyncedSellStock = currentStock;
+                PacketDistributor.sendToPlayer(serverPlayerOwner, new SellPreviewPayload(currentStock));
+            }
+        } else {
+            // Reset so the next item staged always sends a fresh preview, even if its stock happens to match
+            // whatever was last synced for a previous item.
+            lastSyncedSellStock = Long.MIN_VALUE;
+        }
+    }
+
+    // Returns a staged (not-yet-confirmed) Sell Dialog item to the player rather than losing it — same handling
+    // vanilla itself uses for a leftover crafting-grid item on container close (Inventory#placeItemBackInInventory
+    // adds it where there's room, or drops it at the player's feet if there isn't).
+    @Override
+    public void removed(Player player) {
+        super.removed(player);
+        if (player instanceof ServerPlayer) {
+            returnStagedItem();
+        }
+    }
+
+    private void returnStagedItem() {
+        ItemStack staged = sellContainer.getItem(0);
+        if (staged.isEmpty()) {
+            return;
+        }
+        sellContainer.setItem(0, ItemStack.EMPTY);
+        if (serverPlayerOwner != null) {
+            serverPlayerOwner.getInventory().placeItemBackInInventory(staged);
+        }
+    }
+
+    public boolean isSellDialogEnabled() {
+        return sellDialogEnabled;
+    }
+
+    public void handleSellDialogModeChange(boolean enabled) {
+        this.sellDialogEnabled = enabled;
+        if (!enabled) {
+            // Switching back to Quick Sell reverts to instant processing (per design doc) — anything currently
+            // staged wouldn't be picked up by SellSlot's mode check again until re-inserted, so return it now
+            // rather than leaving it stranded in a slot that's about to stop knowing what to do with it.
+            returnStagedItem();
+        }
+    }
+
+    public void handleSellDecision(SellDecisionPayload payload) {
+        if (serverPlayerOwner == null) {
+            return;
+        }
+        ItemStack staged = sellContainer.getItem(0);
+        if (staged.isEmpty()) {
+            return;
+        }
+        if (payload.confirm()) {
+            sellContainer.setItem(0, ItemStack.EMPTY);
+            TradeService.sell(serverPlayerOwner, staged);
+        } else {
+            returnStagedItem();
         }
     }
 
@@ -136,6 +216,14 @@ public class TradeHubMenu extends AbstractContainerMenu {
 
     public void setClientBalance(long balance) {
         this.clientBalance = balance;
+    }
+
+    public long getClientSellPreviewStock() {
+        return clientSellPreviewStock;
+    }
+
+    public void setClientSellPreviewStock(long stock) {
+        this.clientSellPreviewStock = stock;
     }
 
     public CatalogResultPayload getClientCatalogResult() {

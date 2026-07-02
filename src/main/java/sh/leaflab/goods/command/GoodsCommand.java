@@ -1,6 +1,8 @@
 package sh.leaflab.goods.command;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -20,10 +22,14 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
+import sh.leaflab.goods.Config;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
+import sh.leaflab.goods.economy.Stock;
 import sh.leaflab.goods.economy.TradeRequest;
 
 public final class GoodsCommand {
@@ -79,7 +85,10 @@ public final class GoodsCommand {
                 .then(Commands.literal("reset")
                         .requires(Commands.hasPermission(Commands.LEVEL_OWNERS))
                         .then(playerArgument("player")
-                                .executes(GoodsCommand::reset))));
+                                .executes(GoodsCommand::reset)))
+                .then(Commands.literal("metrics")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(GoodsCommand::metrics)));
     }
 
     // StringArgumentType (not EntityArgument.player()) is used for player names so offline players can be
@@ -130,6 +139,65 @@ public final class GoodsCommand {
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.reset", target.name()), true);
         notifyIfOnline(server, target.id(), () -> Component.translatable("commands.thegoods.reset.notify"));
         return 1;
+    }
+
+    private static final int METRICS_TOP_N = 5;
+
+    // All figures here use Currency.formatAbbreviated (K/M/G/... suffixes) rather than full precision — per
+    // docs/spec.md, only /goods balance and a trade about to be confirmed ever show full 10-decimal precision.
+    private static int metrics(CommandContext<CommandSourceStack> ctx) {
+        MinecraftServer server = ctx.getSource().getServer();
+        Map<Item, Long> stock = Stock.positiveStock(server);
+
+        ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.header"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.item_types", stock.size()), false);
+
+        double totalStockValue = 0;
+        for (long n : stock.values()) {
+            totalStockValue += Currency.stockValue(n);
+        }
+        double finalTotalStockValue = totalStockValue;
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "commands.thegoods.metrics.stock_value", Currency.formatAbbreviated(finalTotalStockValue)), false);
+
+        if (Config.TRANSACTION_FEE_PERCENT.get() > 0) {
+            long lifetimeFees = Economy.getLifetimeFees(server);
+            ctx.getSource().sendSuccess(() -> Component.translatable(
+                    "commands.thegoods.metrics.lifetime_fees", Currency.formatAbbreviated(lifetimeFees / (double) Currency.SCALE)), false);
+        }
+
+        long circulation = Economy.totalCirculation(server);
+        ctx.getSource().sendSuccess(() -> Component.translatable(
+                "commands.thegoods.metrics.circulation", Currency.formatAbbreviated(circulation / (double) Currency.SCALE)), false);
+
+        if (!stock.isEmpty()) {
+            // Sorted ascending by stock. Unit price (Currency.buyRawCost(stock, 1)) moves opposite to stock — the
+            // fewer of an item there are, the more the next one costs — so "most valuable" is the low-stock end
+            // of this list and "least valuable" is the high-stock end, not the other way around.
+            List<Map.Entry<Item, Long>> byStock = new ArrayList<>(stock.entrySet());
+            byStock.sort(Map.Entry.comparingByValue());
+
+            ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.most_valuable_header"), false);
+            for (int i = 0; i < Math.min(METRICS_TOP_N, byStock.size()); i++) {
+                sendMetricsItemLine(ctx, byStock.get(i));
+            }
+
+            ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.least_valuable_header"), false);
+            for (int i = byStock.size() - 1; i >= Math.max(0, byStock.size() - METRICS_TOP_N); i--) {
+                sendMetricsItemLine(ctx, byStock.get(i));
+            }
+        }
+
+        return 1;
+    }
+
+    // "Value" here is the single-item price (cost to buy 1 more at the current stock level) — the same
+    // definition of "price" the Buy catalog itself sorts by — not the aggregate value of the whole stock.
+    private static void sendMetricsItemLine(CommandContext<CommandSourceStack> ctx, Map.Entry<Item, Long> entry) {
+        String name = new ItemStack(entry.getKey()).getHoverName().getString();
+        long stock = entry.getValue();
+        String price = Currency.formatAbbreviated(Currency.buyRawCost(stock, 1));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.item_line", name, stock, price), false);
     }
 
     private static int pay(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

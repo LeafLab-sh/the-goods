@@ -1,6 +1,7 @@
 package sh.leaflab.goods.economy;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 // Fixed-point currency representation: a long counting units of 10^-10 (10 decimal places), matching the
 // balance's ~±922M headroom (Long.MAX_VALUE / 1e10 ~= 922,337,203.68). Never round-trips through double/float —
@@ -23,6 +24,11 @@ public final class Currency {
      */
     public static double sellRawValue(long stockBefore, long quantity) {
         return StrictMath.log1p(quantity / (stockBefore + 1.0)) / LN2;
+    }
+
+    /** Value of having {@code n} items in stock, in real (unscaled) currency units — used for /goods metrics. */
+    public static double stockValue(long n) {
+        return StrictMath.log1p(n) / LN2;
     }
 
     /** Cost to buy {@code quantity} out of a stock of {@code stockBefore}, in real (unscaled) currency units. */
@@ -92,5 +98,40 @@ public final class Currency {
             return sum;
         }
         return a >= 0 ? Long.MAX_VALUE : Long.MIN_VALUE;
+    }
+
+    private static final String[] ABBREVIATION_SUFFIXES = {"K", "M", "G", "T", "P", "E", "Z", "Y"};
+
+    /**
+     * Formats a raw (unscaled) value with a K/M/G/T/P/E/Z/Y suffix above 1,000, ≤2 decimals, no trailing zeros —
+     * the tier/threshold scheme from InfiniteStorageCell's {@code InfinityCellItem#formatDouble}
+     * (github.com/nutant233/InfiniteStorageCell), the mod named directly in docs/spec.md as the reference to
+     * follow rather than re-derive. Unlike that reference (which rounds to nearest), this always floors, per this
+     * project's own spec requirement that an abbreviated display never overstates spendable/real value. Used for
+     * GUI totals and /goods metrics — never for /goods balance or a trade about to be confirmed, which always
+     * show full precision via {@link #format}.
+     */
+    public static String formatAbbreviated(double value) {
+        boolean negative = value < 0;
+        double magnitude = Math.abs(value);
+
+        int tier = -1;
+        double scaled = magnitude;
+        while (scaled >= 1000 && tier < ABBREVIATION_SUFFIXES.length - 1) {
+            scaled /= 1000;
+            tier++;
+        }
+
+        String number = flooredTwoDecimals(scaled);
+        String suffix = tier < 0 ? "" : ABBREVIATION_SUFFIXES[tier];
+        return (negative ? "-" : "") + number + suffix;
+    }
+
+    private static String flooredTwoDecimals(double value) {
+        BigDecimal floored = BigDecimal.valueOf(value).setScale(2, RoundingMode.FLOOR).stripTrailingZeros();
+        if (floored.scale() < 0) {
+            floored = floored.setScale(0);
+        }
+        return floored.toPlainString();
     }
 }

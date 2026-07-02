@@ -33,6 +33,19 @@ public final class Economy {
         flush(server);
     }
 
+    public static long totalCirculation(MinecraftServer server) {
+        return data(server).totalCirculation();
+    }
+
+    public static long getLifetimeFees(MinecraftServer server) {
+        return data(server).getLifetimeFees();
+    }
+
+    public static void addLifetimeFees(MinecraftServer server, long amount) {
+        data(server).addLifetimeFees(amount);
+        flush(server);
+    }
+
     /** Caller must have already checked `from` has sufficient balance — this performs no validation. */
     public static void transfer(MinecraftServer server, UUID from, UUID to, long amount) {
         EconomyData data = data(server);

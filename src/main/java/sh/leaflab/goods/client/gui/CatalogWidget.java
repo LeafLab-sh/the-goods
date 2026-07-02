@@ -3,6 +3,7 @@ package sh.leaflab.goods.client.gui;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import net.minecraft.client.gui.Font;
@@ -51,7 +52,7 @@ public class CatalogWidget {
     private final Font font;
     private final Consumer<AbstractWidget> addWidget;
     private final Consumer<GuiEventListener> removeWidget;
-    private final Consumer<CatalogEntry> onSelect;
+    private final BiConsumer<CatalogEntry, Boolean> onSelect;
 
     private EditBox searchBox;
     private ScrollbarWidget scrollbar;
@@ -64,7 +65,7 @@ public class CatalogWidget {
     private int searchDebounceTicks = -1;
 
     public CatalogWidget(int x, int y, int sideButtonX, Font font,
-                          Consumer<AbstractWidget> addWidget, Consumer<GuiEventListener> removeWidget, Consumer<CatalogEntry> onSelect) {
+                          Consumer<AbstractWidget> addWidget, Consumer<GuiEventListener> removeWidget, BiConsumer<CatalogEntry, Boolean> onSelect) {
         this.x = x;
         this.y = y;
         this.sideButtonX = sideButtonX;

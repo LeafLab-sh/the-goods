@@ -25,6 +25,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import sh.leaflab.goods.block.TradeHubBlock;
 import sh.leaflab.goods.command.GoodsCommand;
 import sh.leaflab.goods.datagen.DataGenerators;
+import sh.leaflab.goods.gametest.EconomyGameTests;
 import sh.leaflab.goods.network.NetworkHandler;
 import sh.leaflab.goods.registry.ModMenuTypes;
 
@@ -70,6 +71,10 @@ public class TheGoods {
 
         // Register the Deferred Register to the mod event bus so menu types get registered
         ModMenuTypes.MENU_TYPES.register(modEventBus);
+
+        // Register `./gradlew runGameTestServer` test functions and the tests that reference them
+        EconomyGameTests.TEST_FUNCTIONS.register(modEventBus);
+        modEventBus.addListener(EconomyGameTests::register);
 
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (TheGoods) to respond directly to events.

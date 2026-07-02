@@ -15,6 +15,9 @@ public class NetworkHandler {
         registrar.playToClient(CatalogResultPayload.TYPE, CatalogResultPayload.STREAM_CODEC, NetworkHandler::handleCatalogResult);
         registrar.playToServer(BuyRequestPayload.TYPE, BuyRequestPayload.STREAM_CODEC, NetworkHandler::handleBuyRequest);
         registrar.playToClient(BuyResultPayload.TYPE, BuyResultPayload.STREAM_CODEC, NetworkHandler::handleBuyResult);
+        registrar.playToServer(SetSellDialogModePayload.TYPE, SetSellDialogModePayload.STREAM_CODEC, NetworkHandler::handleSetSellDialogMode);
+        registrar.playToServer(SellDecisionPayload.TYPE, SellDecisionPayload.STREAM_CODEC, NetworkHandler::handleSellDecision);
+        registrar.playToClient(SellPreviewPayload.TYPE, SellPreviewPayload.STREAM_CODEC, NetworkHandler::handleSellPreview);
     }
 
     private static void handleBalanceSync(BalanceSyncPayload payload, IPayloadContext context) {
@@ -44,6 +47,24 @@ public class NetworkHandler {
     private static void handleBuyResult(BuyResultPayload payload, IPayloadContext context) {
         if (context.player().containerMenu instanceof TradeHubMenu menu) {
             menu.setClientLastBuyResult(payload);
+        }
+    }
+
+    private static void handleSetSellDialogMode(SetSellDialogModePayload payload, IPayloadContext context) {
+        if (context.player() instanceof ServerPlayer serverPlayer && serverPlayer.containerMenu instanceof TradeHubMenu menu) {
+            menu.handleSellDialogModeChange(payload.enabled());
+        }
+    }
+
+    private static void handleSellDecision(SellDecisionPayload payload, IPayloadContext context) {
+        if (context.player() instanceof ServerPlayer serverPlayer && serverPlayer.containerMenu instanceof TradeHubMenu menu) {
+            menu.handleSellDecision(payload);
+        }
+    }
+
+    private static void handleSellPreview(SellPreviewPayload payload, IPayloadContext context) {
+        if (context.player().containerMenu instanceof TradeHubMenu menu) {
+            menu.setClientSellPreviewStock(payload.stockBeforeSale());
         }
     }
 }

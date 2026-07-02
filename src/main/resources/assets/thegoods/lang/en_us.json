@@ -17,6 +17,10 @@
   "gui.thegoods.buy.confirm": "Confirm",
   "gui.thegoods.buy.no_selection": "Select an item to buy",
 
+  "gui.thegoods.sell.mode_quick": "Mode: Quick Sell",
+  "gui.thegoods.sell.mode_dialog": "Mode: Sell Dialog",
+  "gui.thegoods.sell.cancel": "Cancel",
+
   "commands.thegoods.buy.success": "Purchase complete",
   "commands.thegoods.buy.invalid_quantity": "Invalid quantity",
   "commands.thegoods.buy.unknown_item": "Unknown item",
@@ -57,6 +61,15 @@
   "commands.thegoods.request.list.empty": "No pending requests",
   "commands.thegoods.request.list.incoming": "From %s, requesting %s from you",
   "commands.thegoods.request.list.outgoing": "You requested %s from %s",
+
+  "commands.thegoods.metrics.header": "=== The Goods: Economy Metrics ===",
+  "commands.thegoods.metrics.item_types": "Distinct item types in stock: %s",
+  "commands.thegoods.metrics.stock_value": "Total value of all stock: %s",
+  "commands.thegoods.metrics.lifetime_fees": "Lifetime transaction fees collected: %s",
+  "commands.thegoods.metrics.circulation": "Total currency in circulation: %s",
+  "commands.thegoods.metrics.most_valuable_header": "-- Most valuable items in stock --",
+  "commands.thegoods.metrics.least_valuable_header": "-- Least valuable items in stock --",
+  "commands.thegoods.metrics.item_line": "  %s: %s in stock (value %s)",
 
   "thegoods.configuration.title": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml": "The Goods Configs",

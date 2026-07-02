@@ -1,6 +1,6 @@
 package sh.leaflab.goods.client.gui;
 
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -15,20 +15,21 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.network.CatalogEntry;
 
 // One clickable grid cell in the catalog — a plain client-side widget, not a menu Slot, so the catalog can show
 // far more items than the vanilla Slot-array approach would scale to (see docs/trade-hub-menu-design.md). The
 // stock count overlay mirrors Refined Storage's per-tile amount display (ResourceSlotRendering#renderAmount).
 public class CatalogCellWidget extends AbstractWidget {
-    private static final String[] SUFFIXES = {"K", "M", "B", "T", "Q"};
-
     private final CatalogEntry entry;
     private final ItemStack displayStack;
     private final Font font;
-    private final Consumer<CatalogEntry> onSelect;
+    // Boolean is "was Shift held" — a shift-click on the store's catalog grid (see docs/spec.md's own "store
+    // inventory" framing) adds a full stack to the Buy quantity instead of just selecting the item.
+    private final BiConsumer<CatalogEntry, Boolean> onSelect;
 
-    public CatalogCellWidget(int x, int y, CatalogEntry entry, Font font, Consumer<CatalogEntry> onSelect) {
+    public CatalogCellWidget(int x, int y, CatalogEntry entry, Font font, BiConsumer<CatalogEntry, Boolean> onSelect) {
         super(x, y, 18, 18, Component.empty());
         this.entry = entry;
         Item item = BuiltInRegistries.ITEM.getOptional(entry.item()).orElse(Items.AIR);
@@ -48,7 +49,7 @@ public class CatalogCellWidget extends AbstractWidget {
             graphics.fill(this.getX() - 1, this.getY() - 1, this.getX() + 17, this.getY() + 17, 0x80FFFFFF);
         }
         graphics.item(displayStack, this.getX() + 1, this.getY() + 1, 0);
-        renderAmount(graphics, this.getX() + 1, this.getY() + 1, formatStock(entry.stock()));
+        renderAmount(graphics, this.getX() + 1, this.getY() + 1, Currency.formatAbbreviated(entry.stock()));
     }
 
     // Refined Storage's ResourceSlotRendering#renderAmount only shrinks text wider than 16px, leaving short
@@ -62,26 +63,9 @@ public class CatalogCellWidget extends AbstractWidget {
         graphics.pose().popMatrix();
     }
 
-    // Floors to one decimal place, same rounding direction as this project's currency formatting elsewhere —
-    // never overstates what's actually in stock.
-    private static String formatStock(long stock) {
-        if (stock < 1000) {
-            return Long.toString(stock);
-        }
-        long divisor = 1000;
-        int tier = 0;
-        while (stock / divisor >= 1000 && tier < SUFFIXES.length - 1) {
-            divisor *= 1000;
-            tier++;
-        }
-        long whole = stock / divisor;
-        long tenths = (stock % divisor) * 10 / divisor;
-        return whole + "." + tenths + SUFFIXES[tier];
-    }
-
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
-        onSelect.accept(entry);
+        onSelect.accept(entry, event.hasShiftDown());
     }
 
     @Override

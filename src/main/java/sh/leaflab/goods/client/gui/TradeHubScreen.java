@@ -40,6 +40,11 @@ public class TradeHubScreen extends AbstractContainerScreen<TradeHubMenu> {
     private static final int SELL_HEADING_X = 8;
     private static final int BALANCE_X = 8;
     private static final int BALANCE_Y = TradeHubMenu.SELL_SLOT_Y + 18 + 6;
+    private static final int SELL_DIALOG_X = 8;
+    // Same Y as BALANCE_Y — only one of the two is actually drawn at a time, depending on mode: Quick Sell draws
+    // balance here directly (extractLabels), Sell Dialog mode hands this whole area to SellDialog instead, which
+    // draws price/placeholder first and balance below it (swapped order — see SellDialog).
+    private static final int SELL_DIALOG_Y = BALANCE_Y;
     // No "Buy" heading (removed — the right side has no heading, so its content starts right at MIDDLE_TOP).
     private static final int BUY_DIALOG_X = DIVIDER_X + 4;
     private static final int BUY_DIALOG_Y = MIDDLE_TOP;
@@ -47,6 +52,7 @@ public class TradeHubScreen extends AbstractContainerScreen<TradeHubMenu> {
 
     private CatalogWidget catalogWidget;
     private BuyDialog buyDialog;
+    private SellDialog sellDialog;
     private CatalogResultPayload lastSeenCatalogResult;
     private BuyResultPayload lastSeenBuyResult;
 
@@ -68,16 +74,29 @@ public class TradeHubScreen extends AbstractContainerScreen<TradeHubMenu> {
                 this::addRenderableWidget, this::removeWidget, this::onCatalogEntrySelected);
         catalogWidget.init();
         buyDialog = new BuyDialog(this.leftPos + BUY_DIALOG_X, this.topPos + BUY_DIALOG_Y, this.font, this::addRenderableWidget);
+        sellDialog = new SellDialog(this.leftPos + SELL_DIALOG_X, this.topPos + SELL_DIALOG_Y, this.font, this.menu, this::addRenderableWidget, this::removeWidget);
+        // Sell mode toggle floats outside the panel to the left, aligned with the Sell Slot — same idiom as the
+        // catalog's sort-mode side buttons, just its own separate column position rather than stacked with them.
+        addRenderableWidget(new SideButtonWidget(sideButtonX, this.topPos + TradeHubMenu.SELL_SLOT_Y, this.font,
+                () -> null, sellDialog::modeIconText, sellDialog::modeTooltip, sellDialog::toggleMode));
     }
 
-    private void onCatalogEntrySelected(sh.leaflab.goods.network.CatalogEntry entry) {
-        buyDialog.open(entry, this.menu.getClientBalance(), catalogWidget.getFeePercent());
+    // Shift-clicking a cell in the catalog ("the store inventory," per docs/spec.md) adds a full stack to the
+    // Buy quantity instead of just selecting the item — same "Shift = a full stack" convention as the +/-
+    // buttons, just triggered from the grid itself as a shortcut.
+    private void onCatalogEntrySelected(sh.leaflab.goods.network.CatalogEntry entry, boolean shiftHeld) {
+        if (shiftHeld) {
+            buyDialog.addStack(entry, this.menu.getClientBalance(), catalogWidget.getFeePercent());
+        } else {
+            buyDialog.open(entry, this.menu.getClientBalance(), catalogWidget.getFeePercent());
+        }
     }
 
     @Override
     protected void containerTick() {
         super.containerTick();
         catalogWidget.tick();
+        sellDialog.tick();
 
         CatalogResultPayload catalogResult = this.menu.getClientCatalogResult();
         if (catalogResult != null && catalogResult != lastSeenCatalogResult) {
@@ -136,6 +155,7 @@ public class TradeHubScreen extends AbstractContainerScreen<TradeHubMenu> {
 
         catalogWidget.extractExtra(graphics);
         buyDialog.extractExtra(graphics);
+        sellDialog.extractExtra(graphics);
     }
 
     // An 18x18 cell around a slot's 16x16 item area: dark edge at bottom/right, light edge at top/left, mid-gray
@@ -152,8 +172,12 @@ public class TradeHubScreen extends AbstractContainerScreen<TradeHubMenu> {
         graphics.text(this.font, this.title, this.titleLabelX, this.titleLabelY, TITLE_COLOR, false);
 
         graphics.text(this.font, SELL_HEADING, SELL_HEADING_X, MIDDLE_TOP, TITLE_COLOR, false);
-        String balanceText = Currency.format(this.menu.getClientBalance());
-        graphics.text(this.font, balanceText, BALANCE_X, BALANCE_Y, BALANCE_COLOR, false);
+        // In Sell Dialog mode, SellDialog draws balance itself (below the price/placeholder line — swapped
+        // order) instead of this fixed spot.
+        if (!this.menu.isSellDialogEnabled()) {
+            String balanceText = Currency.format(this.menu.getClientBalance());
+            graphics.text(this.font, balanceText, BALANCE_X, BALANCE_Y, BALANCE_COLOR, false);
+        }
 
         graphics.text(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, TITLE_COLOR, false);
     }

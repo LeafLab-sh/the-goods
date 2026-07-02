@@ -18,7 +18,9 @@ import net.minecraft.world.level.saveddata.SavedDataType;
 import sh.leaflab.goods.TheGoods;
 
 public class EconomyData extends SavedData {
-    public static final int DATA_VERSION = 1;
+    // Bumped from 1: added lifetime_fees (Milestone 7). Old saves without the field default to 0 via
+    // optionalFieldOf — no migration logic needed for an additive change like this.
+    public static final int DATA_VERSION = 2;
 
     // data_version is written on every save (always the current DATA_VERSION) but not otherwise used yet — it
     // exists so a future migration can tell an old save file apart from a current one before this mod has ever
@@ -26,21 +28,24 @@ public class EconomyData extends SavedData {
     public static final Codec<EconomyData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.INT.fieldOf("data_version").forGetter(data -> DATA_VERSION),
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG).fieldOf("balances").forGetter(EconomyData::balances),
-            TradeRequest.CODEC.listOf().fieldOf("requests").forGetter(EconomyData::requests)
-    ).apply(instance, (loadedDataVersion, balances, requests) -> new EconomyData(balances, requests)));
+            TradeRequest.CODEC.listOf().fieldOf("requests").forGetter(EconomyData::requests),
+            Codec.LONG.optionalFieldOf("lifetime_fees", 0L).forGetter(EconomyData::lifetimeFees)
+    ).apply(instance, (loadedDataVersion, balances, requests, lifetimeFees) -> new EconomyData(balances, requests, lifetimeFees)));
 
     public static final SavedDataType<EconomyData> TYPE = new SavedDataType<>(
             Identifier.fromNamespaceAndPath(TheGoods.MODID, "economy"),
-            () -> new EconomyData(new HashMap<>(), new ArrayList<>()),
+            () -> new EconomyData(new HashMap<>(), new ArrayList<>(), 0L),
             CODEC
     );
 
     private final Map<UUID, Long> balances;
     private final List<TradeRequest> requests;
+    private long lifetimeFees;
 
-    private EconomyData(Map<UUID, Long> balances, List<TradeRequest> requests) {
+    private EconomyData(Map<UUID, Long> balances, List<TradeRequest> requests, long lifetimeFees) {
         this.balances = new HashMap<>(balances);
         this.requests = new ArrayList<>(requests);
+        this.lifetimeFees = lifetimeFees;
     }
 
     private Map<UUID, Long> balances() {
@@ -51,12 +56,34 @@ public class EconomyData extends SavedData {
         return requests;
     }
 
+    private long lifetimeFees() {
+        return lifetimeFees;
+    }
+
     public long getBalance(UUID player) {
         return balances.getOrDefault(player, 0L);
     }
 
     public void setBalance(UUID player, long amount) {
         balances.put(player, amount);
+        setDirty();
+    }
+
+    /** Sum of every player's balance — an inflation signal, since /goods give injects unbacked currency. */
+    public long totalCirculation() {
+        long total = 0L;
+        for (long balance : balances.values()) {
+            total = Currency.saturatingAdd(total, balance);
+        }
+        return total;
+    }
+
+    public long getLifetimeFees() {
+        return lifetimeFees;
+    }
+
+    public void addLifetimeFees(long amount) {
+        lifetimeFees = Currency.saturatingAdd(lifetimeFees, amount);
         setDirty();
     }
 

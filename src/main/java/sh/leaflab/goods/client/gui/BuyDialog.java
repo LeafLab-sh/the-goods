@@ -88,6 +88,22 @@ public class BuyDialog {
         recomputeLayout();
     }
 
+    // Shift-clicking a catalog cell: selects entry if it wasn't already, then adds a full stack of the item to
+    // the quantity (capped at whatever's actually affordable/available, same as the +/- buttons' own Shift
+    // behavior) — re-clicking the same already-selected item keeps adding another stack each time, cumulative.
+    public void addStack(CatalogEntry entry, long balance, int feePercent) {
+        boolean sameItem = this.entry != null && this.entry.item().equals(entry.item());
+        if (sameItem) {
+            this.entry = entry;
+            this.feePercent = feePercent;
+            this.affordableMax = maxAffordable(entry.stock(), balance, feePercent);
+            adjustQuantity(true, displayStack.getMaxStackSize());
+        } else {
+            open(entry, balance, feePercent);
+            setQuantity(displayStack.getMaxStackSize());
+        }
+    }
+
     // Called after a successful buy — resets to the no-selection state rather than removing any widgets, since
     // the dialog stays visible (just disabled) with nothing selected.
     public void close() {
