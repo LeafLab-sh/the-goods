@@ -1,8 +1,5 @@
 name: Build
 
-# All actions below are pinned to a commit SHA rather than a mutable version tag — the norm for every workflow in
-# this repo, not just this one. This workflow runs on pull_request, including from external forks, so a
-# compromised tag update on any of these (first- or third-party) would otherwise run in CI for free.
 on: [push, pull_request]
 
 jobs:
