@@ -16,6 +16,13 @@ information matches that version.
 > empty. Until the mappings index catches up, omit `minecraft_version` (falls back to 1.21.9) and treat returned
 > class/method/parameter names as approximate, not authoritative, for this project.
 
+> **Note:** GameTest's `@GameTestHolder`/`@GameTest` annotations (what most tutorials, and even
+> `docs.neoforged.net/docs/1.21.1/...`, still describe) don't exist in this MC version — removed from vanilla
+> around 1.21.5. Current API: a `Consumer<GameTestHelper>` registered via `DeferredRegister` on
+> `BuiltInRegistries.TEST_FUNCTION`, wired to a `TestData`+`FunctionGameTestInstance` inside a
+> `RegisterGameTestsEvent` listener on the mod bus. See `docs.neoforged.net/docs/misc/gametest/` (unversioned)
+> and `EconomyGameTests.java` for the working pattern.
+
 ## Project
 
 **The Goods** (`thegoods`) — a NeoForge Minecraft mod. A store/trading mod that values items based on
@@ -44,9 +51,20 @@ how many are in stock.
 ./gradlew clean               # Delete build outputs (does not affect src/)
 ```
 
+Gradle 9.x/10's Groovy DSL requires `propName = value` for property assignment inside task-configuration
+blocks (e.g. `exceptionFormat = "full"`, not `exceptionFormat "full"`) — the old call-syntax is deprecated
+and warns on every build without failing it.
+
 Pure logic with no Minecraft/NeoForge dependencies (e.g. `Currency`) has JUnit 5 unit tests under
 `src/test/java`, run via `./gradlew test`. Anything touching `MinecraftServer`/`ServerLevel`/`SavedData`/item
 registries is only testable via GameTest (`runGameTestServer`).
+
+When testing `StrictMath`-based formulas (e.g. `Currency`), don't hand-compute expected values — get them via
+`jshell` using the exact same calls, since floating-point rounding isn't safe to eyeball to 10 decimal places.
+
+`run/config/thegoods-common.toml` is gitignored local dev state (item deny/allow lists, fee %) — a GameTest
+that picks a "typical example" item (e.g. a stick) can spuriously fail if that item collides with something
+added there during manual play-testing. Prefer deliberately obscure items in new tests.
 
 ## Architecture
 
@@ -77,3 +95,10 @@ task into `build/generated/sources/modMetadata/`. The `neoforge.mods.toml` lives
 `Config.java` uses `ModConfigSpec.Builder`; the built `SPEC` is registered in the mod constructor via
 `modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC)`. The config screen is wired in
 `TheGoodsClient` via `IConfigScreenFactory`.
+
+### CI/CD
+- `.github/workflows/*.yml` — every action is pinned to a commit SHA (not a version tag), with a `# vX.Y.Z`
+  comment alongside it; keep new/updated actions pinned the same way.
+- Pushing a tag matching `v*.*.*` triggers `release.yml`: builds, runs both test suites, creates a GitHub
+  Release, and publishes to CurseForge. The tag itself is the version — it overrides `mod_version` at build
+  time, so `gradle.properties`'s value never needs to be kept in sync with it.
