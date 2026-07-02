@@ -19,7 +19,9 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        # Pinned to a commit SHA (not the mutable v6 tag) — this workflow runs on pull_request, including from
+        # external forks, so a compromised tag update on a third-party action is a real supply-chain risk here.
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       - name: Build with Gradle
         run: ./gradlew build
