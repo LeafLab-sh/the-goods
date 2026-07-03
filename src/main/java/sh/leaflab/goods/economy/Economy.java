@@ -73,7 +73,7 @@ public final class Economy {
 
     /**
      * Attempts to accept {@code pending} (a request already known to exist), re-validating {@code payer}'s
-     * balance at resolution time — it may have dropped since the request was created. The single source of
+     * balance at resolution time — it may have dropped since the request was created. This is the single source of
      * truth for this guard, shared by GoodsCommand#requestAccept and its GameTest coverage, so a regression here
      * can't silently diverge between production and what's tested.
      *
