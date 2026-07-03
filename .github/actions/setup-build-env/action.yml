@@ -1,8 +1,8 @@
+# Checkout is deliberately NOT included here: GitHub Actions resolves a local action reference ("uses: ./path")
+# by reading this file off the job's workspace, which is empty until checkout has already run — so checkout must
+# stay a separate step in each calling workflow, before this action is referenced, not inside it.
 name: Setup build environment
-description: JDK 25 and Gradle — the common setup both CI workflows need before running Gradle tasks. Checkout is
-  NOT included here: GitHub Actions resolves a local action reference (uses: ./path) by reading this file off the
-  job's workspace, which is empty until checkout has already run — so checkout must stay a separate step in each
-  calling workflow, before this action is referenced, not inside it.
+description: JDK 25 and Gradle setup shared by both CI workflows.
 
 runs:
   using: composite
