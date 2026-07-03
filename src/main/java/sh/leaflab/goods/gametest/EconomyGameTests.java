@@ -24,6 +24,7 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+import sh.leaflab.goods.Config;
 import sh.leaflab.goods.TheGoods;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
@@ -64,6 +65,8 @@ public final class EconomyGameTests {
             register("invalid_quantity_rejected_before_pricing", EconomyGameTests::invalidQuantityRejectedBeforePricing);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS =
             register("catalog_excludes_zero_stock_and_sorts", EconomyGameTests::catalogExcludesZeroStockAndSorts);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BUY_COST_HONORS_FEE_BOUNDARIES =
+            register("buy_cost_honors_fee_boundaries", EconomyGameTests::buyCostHonorsFeeBoundaries);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -75,7 +78,7 @@ public final class EconomyGameTests {
         for (DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> test : List.of(
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
-                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS)) {
+                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -247,6 +250,47 @@ public final class EconomyGameTests {
         int highIdx = indexOf(results, BuiltInRegistries.ITEM.getKey(high));
         helper.assertTrue(lowIdx >= 0 && midIdx >= 0 && highIdx >= 0, "all three stocked items should appear in the catalog");
         helper.assertTrue(lowIdx < midIdx && midIdx < highIdx, "ascending stock sort should order low < mid < high stock");
+        helper.succeed();
+    }
+
+    // Exercises docs/spec.md's TransactionFeePercent boundaries (0-100 inclusive): at 0% the buyer pays exactly
+    // the unrounded buy cost, and at 100% the fee doubles the raw cost before the single ceil-rounding step
+    // (never rounded twice — see Currency's own Javadoc on buyCostWithFee). Restores the original config value
+    // in a finally block so this test can't leak a changed fee into any test that runs after it in the batch.
+    private static void buyCostHonorsFeeBoundaries(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "fee-boundary");
+        Item item = Items.GLOWSTONE_DUST;
+        Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
+        int originalFeePercent = Config.TRANSACTION_FEE_PERCENT.get();
+
+        TradeService.sell(player, new ItemStack(item, 10));
+        Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
+
+        try {
+            Config.TRANSACTION_FEE_PERCENT.set(0);
+            long stockBeforeZeroFee = Stock.getStock(server, item);
+            long balanceBeforeZeroFee = Economy.getBalance(server, player.getUUID());
+            int zeroFeeQuoteHash = QuoteHash.of(itemId, stockBeforeZeroFee, Stock.getEpoch(server));
+            TradeService.BuyOutcome zeroFeeOutcome = TradeService.buy(player, itemId, 1, zeroFeeQuoteHash);
+            long zeroFeeCharge = balanceBeforeZeroFee - Economy.getBalance(server, player.getUUID());
+
+            helper.assertTrue(zeroFeeOutcome.success(), "0% fee buy should succeed");
+            helper.assertTrue(zeroFeeCharge == Currency.buyCost(stockBeforeZeroFee, 1), "0% fee should charge exactly the unrounded buy cost, no markup");
+
+            Config.TRANSACTION_FEE_PERCENT.set(100);
+            long stockBeforeFullFee = Stock.getStock(server, item);
+            long balanceBeforeFullFee = Economy.getBalance(server, player.getUUID());
+            int fullFeeQuoteHash = QuoteHash.of(itemId, stockBeforeFullFee, Stock.getEpoch(server));
+            TradeService.BuyOutcome fullFeeOutcome = TradeService.buy(player, itemId, 1, fullFeeQuoteHash);
+            long fullFeeCharge = balanceBeforeFullFee - Economy.getBalance(server, player.getUUID());
+
+            helper.assertTrue(fullFeeOutcome.success(), "100% fee buy should succeed");
+            helper.assertTrue(fullFeeCharge == Currency.buyCostWithFee(stockBeforeFullFee, 1, 100), "100% fee should charge the fee-adjusted, once-rounded cost");
+        } finally {
+            Config.TRANSACTION_FEE_PERCENT.set(originalFeePercent);
+        }
+
         helper.succeed();
     }
 
