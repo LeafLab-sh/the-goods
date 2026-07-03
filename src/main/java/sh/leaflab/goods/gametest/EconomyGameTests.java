@@ -30,6 +30,7 @@ import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
 import sh.leaflab.goods.economy.QuoteHash;
 import sh.leaflab.goods.economy.Stock;
+import sh.leaflab.goods.economy.TradeRequest;
 import sh.leaflab.goods.economy.TradeService;
 import sh.leaflab.goods.menu.TradeHubMenu;
 import sh.leaflab.goods.network.CatalogEntry;
@@ -67,6 +68,8 @@ public final class EconomyGameTests {
             register("catalog_excludes_zero_stock_and_sorts", EconomyGameTests::catalogExcludesZeroStockAndSorts);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BUY_COST_HONORS_FEE_BOUNDARIES =
             register("buy_cost_honors_fee_boundaries", EconomyGameTests::buyCostHonorsFeeBoundaries);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REQUEST_ACCEPT_REVALIDATES_BALANCE =
+            register("request_accept_revalidates_balance", EconomyGameTests::requestAcceptRevalidatesBalance);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -78,7 +81,8 @@ public final class EconomyGameTests {
         for (DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> test : List.of(
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
-                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES)) {
+                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
+                REQUEST_ACCEPT_REVALIDATES_BALANCE)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -291,6 +295,43 @@ public final class EconomyGameTests {
             Config.TRANSACTION_FEE_PERCENT.set(originalFeePercent);
         }
 
+        helper.succeed();
+    }
+
+    // Exercises docs/spec.md's accept-time re-validation requirement: an Accept must re-check the payer's balance
+    // at resolution time, not at request-creation time, since it may have dropped in between. Drives the same
+    // Economy calls GoodsCommand#requestAccept makes (findRequest/getBalance/removeRequest/transfer) rather than
+    // dispatching the slash command itself, matching this suite's existing pattern.
+    private static void requestAcceptRevalidatesBalance(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer requester = testPlayer(helper, "request-accept-requester");
+        ServerPlayer payer = testPlayer(helper, "request-accept-payer");
+        long requestAmount = Currency.parseExact("100");
+
+        Economy.give(server, payer.getUUID(), requestAmount);
+        Economy.putRequest(server, new TradeRequest(requester.getUUID(), payer.getUUID(), requestAmount));
+
+        // Balance drops below the pending request's amount after the request was made but before it's accepted.
+        Economy.take(server, payer.getUUID(), Currency.parseExact("50"));
+
+        TradeRequest pending = Economy.findRequest(server, requester.getUUID(), payer.getUUID()).orElse(null);
+        helper.assertTrue(pending != null, "the pending request should still be found at resolution time");
+        boolean sufficientBalance = Economy.getBalance(server, payer.getUUID()) >= pending.amount();
+        helper.assertTrue(!sufficientBalance, "payer's balance should now be insufficient for the pending request");
+        helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isPresent(),
+                "an insufficient-balance accept must leave the request pending, not silently consume it");
+
+        // Top the payer back up past the amount and confirm acceptance succeeds and transfers correctly.
+        Economy.give(server, payer.getUUID(), Currency.parseExact("50"));
+        long payerBalanceBefore = Economy.getBalance(server, payer.getUUID());
+        long requesterBalanceBefore = Economy.getBalance(server, requester.getUUID());
+
+        Economy.removeRequest(server, requester.getUUID(), payer.getUUID());
+        Economy.transfer(server, payer.getUUID(), requester.getUUID(), pending.amount());
+
+        helper.assertTrue(Economy.getBalance(server, payer.getUUID()) == payerBalanceBefore - pending.amount(), "accepted transfer should debit the payer by exactly the request amount");
+        helper.assertTrue(Economy.getBalance(server, requester.getUUID()) == requesterBalanceBefore + pending.amount(), "accepted transfer should credit the requester by exactly the request amount");
+        helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isEmpty(), "the request should be gone once accepted");
         helper.succeed();
     }
 
