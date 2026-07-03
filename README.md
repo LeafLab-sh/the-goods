@@ -52,6 +52,7 @@ Only plain, unmodified item stacks can be sold — no enchanted gear, no renamed
 | `/goods give <player> <amount>` | op | Add to a player's balance, notifies them if online |
 | `/goods take <player> <amount>` | op | Subtract from a player's balance (floors at 0), notifies them if online |
 | `/goods reset <player>` | op | Zero out a player's balance, notifies them if online |
+| `/goods metrics` | gamemaster | Server-wide economy stats: item types in stock, total stock value, currency in circulation, top/bottom valued items |
 
 `give`/`take`/`pay`/`request` all work with offline players by name, not just players currently online.
 
