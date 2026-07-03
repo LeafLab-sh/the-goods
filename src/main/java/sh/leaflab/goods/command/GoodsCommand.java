@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
@@ -367,7 +368,7 @@ public final class GoodsCommand {
         return server.services().nameToIdCache().get(uuid).map(NameAndId::name).orElse(uuid.toString());
     }
 
-    private static void notifyIfOnline(MinecraftServer server, UUID playerId, java.util.function.Supplier<Component> message) {
+    private static void notifyIfOnline(MinecraftServer server, UUID playerId, Supplier<Component> message) {
         ServerPlayer online = server.getPlayerList().getPlayer(playerId);
         if (online != null) {
             online.sendSystemMessage(message.get());
