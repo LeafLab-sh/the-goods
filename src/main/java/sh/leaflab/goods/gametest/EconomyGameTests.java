@@ -298,10 +298,10 @@ public final class EconomyGameTests {
         helper.succeed();
     }
 
-    // Exercises docs/spec.md's accept-time re-validation requirement: an Accept must re-check the payer's balance
-    // at resolution time, not at request-creation time, since it may have dropped in between. Drives the same
-    // Economy calls GoodsCommand#requestAccept makes (findRequest/getBalance/removeRequest/transfer) rather than
-    // dispatching the slash command itself, matching this suite's existing pattern.
+    // Exercises docs/spec.md's accept-time re-validation requirement via the actual production guard
+    // (Economy#acceptRequest, also called by GoodsCommand#requestAccept) rather than reimplementing the balance
+    // comparison inline — so a regression that removes or weakens the guard in Economy#acceptRequest itself
+    // fails this test, not just a copy of the check that could silently diverge from production.
     private static void requestAcceptRevalidatesBalance(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer requester = testPlayer(helper, "request-accept-requester");
@@ -316,19 +316,20 @@ public final class EconomyGameTests {
 
         TradeRequest pending = Economy.findRequest(server, requester.getUUID(), payer.getUUID()).orElse(null);
         helper.assertTrue(pending != null, "the pending request should still be found at resolution time");
-        boolean sufficientBalance = Economy.getBalance(server, payer.getUUID()) >= pending.amount();
-        helper.assertTrue(!sufficientBalance, "payer's balance should now be insufficient for the pending request");
+
+        boolean acceptedWithInsufficientBalance = Economy.acceptRequest(server, pending);
+        helper.assertTrue(!acceptedWithInsufficientBalance, "the real guard must reject an accept when the payer's balance is now insufficient");
         helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isPresent(),
                 "an insufficient-balance accept must leave the request pending, not silently consume it");
 
-        // Top the payer back up past the amount and confirm acceptance succeeds and transfers correctly.
+        // Top the payer back up past the amount and confirm the real guard now succeeds and transfers correctly.
         Economy.give(server, payer.getUUID(), Currency.parseExact("50"));
         long payerBalanceBefore = Economy.getBalance(server, payer.getUUID());
         long requesterBalanceBefore = Economy.getBalance(server, requester.getUUID());
 
-        Economy.removeRequest(server, requester.getUUID(), payer.getUUID());
-        Economy.transfer(server, payer.getUUID(), requester.getUUID(), pending.amount());
+        boolean acceptedNow = Economy.acceptRequest(server, pending);
 
+        helper.assertTrue(acceptedNow, "the real guard must accept once the payer's balance is sufficient again");
         helper.assertTrue(Economy.getBalance(server, payer.getUUID()) == payerBalanceBefore - pending.amount(), "accepted transfer should debit the payer by exactly the request amount");
         helper.assertTrue(Economy.getBalance(server, requester.getUUID()) == requesterBalanceBefore + pending.amount(), "accepted transfer should credit the requester by exactly the request amount");
         helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isEmpty(), "the request should be gone once accepted");

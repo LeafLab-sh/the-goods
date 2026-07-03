@@ -244,12 +244,9 @@ public final class GoodsCommand {
         TradeRequest pending = Economy.findRequest(server, requester.id(), payer.getUUID())
                 .orElseThrow(() -> NO_PENDING_REQUEST.create(requester.name()));
 
-        // Re-validate at resolution time — the payer's balance may have dropped since the request was made.
-        if (Economy.getBalance(server, payer.getUUID()) < pending.amount()) {
+        if (!Economy.acceptRequest(server, pending)) {
             throw INSUFFICIENT_BALANCE.create();
         }
-        Economy.removeRequest(server, requester.id(), payer.getUUID());
-        Economy.transfer(server, payer.getUUID(), requester.id(), pending.amount());
 
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.request.accepted", Currency.format(pending.amount()), requester.name()), true);
