@@ -24,6 +24,11 @@ A searchable, scrollable catalog of everything currently in stock — sort by na
 **A real currency**
 Every player has a balance, stored precisely (no floating-point rounding weirdness) and persisted with the world. Pay other players directly, or send a payment *request* that shows up as a clickable prompt they can accept, deny, or you can cancel.
 
+**Server insights**
+Admins get `/goods metrics` for a server-wide read on the economy — item types in stock, total stock value,
+currency in circulation, and the top/bottom valued items. Sellers who want a confirm-before-selling step can
+opt into Sell Dialog mode instead of the default instant Quick Sell.
+
 **Server-configurable**
 - Custom currency name
 - Optional transaction fee on purchases
@@ -36,16 +41,13 @@ Every player has a balance, stored precisely (no floating-point rounding weirdne
 - `/goods request <amount> <player>` — ask another player to pay you, with an in-chat Accept/Deny prompt
 - `/goods request accept|deny|cancel|list` — manage pending requests
 - `/goods give|take|reset <player> [amount]` — admin balance management
+- `/goods metrics` — admin-only server-wide economy stats
 
 ## Requirements
 
 - Minecraft 26.2
 - NeoForge 26.2.0.7-beta or later
 
-## Coming soon
-
-Server-wide economy metrics (`/goods metrics`), an optional confirm-before-selling mode for the Sell Slot, and further UI polish are planned for an upcoming update.
-
 ---
 
-*Found a bug or have a suggestion? [Link to your issue tracker / Discord / GitHub here.]*
+*Found a bug or have a suggestion? Feel free to leave a comment below.*

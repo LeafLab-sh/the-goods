@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
@@ -243,12 +244,9 @@ public final class GoodsCommand {
         TradeRequest pending = Economy.findRequest(server, requester.id(), payer.getUUID())
                 .orElseThrow(() -> NO_PENDING_REQUEST.create(requester.name()));
 
-        // Re-validate at resolution time — the payer's balance may have dropped since the request was made.
-        if (Economy.getBalance(server, payer.getUUID()) < pending.amount()) {
+        if (!Economy.acceptRequest(server, pending)) {
             throw INSUFFICIENT_BALANCE.create();
         }
-        Economy.removeRequest(server, requester.id(), payer.getUUID());
-        Economy.transfer(server, payer.getUUID(), requester.id(), pending.amount());
 
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.request.accepted", Currency.format(pending.amount()), requester.name()), true);
@@ -367,7 +365,7 @@ public final class GoodsCommand {
         return server.services().nameToIdCache().get(uuid).map(NameAndId::name).orElse(uuid.toString());
     }
 
-    private static void notifyIfOnline(MinecraftServer server, UUID playerId, java.util.function.Supplier<Component> message) {
+    private static void notifyIfOnline(MinecraftServer server, UUID playerId, Supplier<Component> message) {
         ServerPlayer online = server.getPlayerList().getPlayer(playerId);
         if (online != null) {
             online.sendSystemMessage(message.get());

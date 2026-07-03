@@ -4,7 +4,6 @@ import java.util.Map;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.level.storage.SavedDataStorage;
 
 public final class Stock {
     private Stock() {
@@ -38,14 +37,10 @@ public final class Stock {
 
     // Always fetched from the overworld, matching Economy — one stock ledger for the whole server, not per dimension.
     private static StockData data(MinecraftServer server) {
-        return dataStorage(server).computeIfAbsent(StockData.TYPE);
-    }
-
-    private static SavedDataStorage dataStorage(MinecraftServer server) {
-        return server.overworld().getDataStorage();
+        return SavedDataAccess.get(server, StockData.TYPE);
     }
 
     private static void flush(MinecraftServer server) {
-        dataStorage(server).saveAndJoin();
+        SavedDataAccess.flush(server);
     }
 }

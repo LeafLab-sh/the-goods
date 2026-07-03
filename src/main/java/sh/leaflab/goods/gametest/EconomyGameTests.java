@@ -1,6 +1,7 @@
 package sh.leaflab.goods.gametest;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -24,11 +25,13 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+import sh.leaflab.goods.Config;
 import sh.leaflab.goods.TheGoods;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
 import sh.leaflab.goods.economy.QuoteHash;
 import sh.leaflab.goods.economy.Stock;
+import sh.leaflab.goods.economy.TradeRequest;
 import sh.leaflab.goods.economy.TradeService;
 import sh.leaflab.goods.menu.TradeHubMenu;
 import sh.leaflab.goods.network.CatalogEntry;
@@ -64,6 +67,16 @@ public final class EconomyGameTests {
             register("invalid_quantity_rejected_before_pricing", EconomyGameTests::invalidQuantityRejectedBeforePricing);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS =
             register("catalog_excludes_zero_stock_and_sorts", EconomyGameTests::catalogExcludesZeroStockAndSorts);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> BUY_COST_HONORS_FEE_BOUNDARIES =
+            register("buy_cost_honors_fee_boundaries", EconomyGameTests::buyCostHonorsFeeBoundaries);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REQUEST_ACCEPT_REVALIDATES_BALANCE =
+            register("request_accept_revalidates_balance", EconomyGameTests::requestAcceptRevalidatesBalance);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> METRICS_DATA_AGGREGATES_CORRECTLY =
+            register("metrics_data_aggregates_correctly", EconomyGameTests::metricsDataAggregatesCorrectly);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY =
+            register("give_take_reset_mutate_balances_correctly", EconomyGameTests::giveTakeResetMutateBalancesCorrectly);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT =
+            register("sell_interleaved_with_buy_keeps_stock_consistent", EconomyGameTests::sellInterleavedWithBuyKeepsStockConsistent);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -75,7 +88,9 @@ public final class EconomyGameTests {
         for (DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> test : List.of(
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
-                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS)) {
+                INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
+                REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY, GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY,
+                SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -247,6 +262,168 @@ public final class EconomyGameTests {
         int highIdx = indexOf(results, BuiltInRegistries.ITEM.getKey(high));
         helper.assertTrue(lowIdx >= 0 && midIdx >= 0 && highIdx >= 0, "all three stocked items should appear in the catalog");
         helper.assertTrue(lowIdx < midIdx && midIdx < highIdx, "ascending stock sort should order low < mid < high stock");
+        helper.succeed();
+    }
+
+    // Exercises docs/spec.md's TransactionFeePercent boundaries (0-100 inclusive): at 0% the buyer pays exactly
+    // the unrounded buy cost, and at 100% the fee doubles the raw cost before the single ceil-rounding step
+    // (never rounded twice — see Currency's own Javadoc on buyCostWithFee). Restores the original config value
+    // in a finally block so this test can't leak a changed fee into any test that runs after it in the batch.
+    private static void buyCostHonorsFeeBoundaries(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "fee-boundary");
+        Item item = Items.GLOWSTONE_DUST;
+        Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
+        int originalFeePercent = Config.TRANSACTION_FEE_PERCENT.get();
+
+        TradeService.sell(player, new ItemStack(item, 10));
+        Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
+
+        try {
+            Config.TRANSACTION_FEE_PERCENT.set(0);
+            long stockBeforeZeroFee = Stock.getStock(server, item);
+            long balanceBeforeZeroFee = Economy.getBalance(server, player.getUUID());
+            int zeroFeeQuoteHash = QuoteHash.of(itemId, stockBeforeZeroFee, Stock.getEpoch(server));
+            TradeService.BuyOutcome zeroFeeOutcome = TradeService.buy(player, itemId, 1, zeroFeeQuoteHash);
+            long zeroFeeCharge = balanceBeforeZeroFee - Economy.getBalance(server, player.getUUID());
+
+            helper.assertTrue(zeroFeeOutcome.success(), "0% fee buy should succeed");
+            helper.assertTrue(zeroFeeCharge == Currency.buyCost(stockBeforeZeroFee, 1), "0% fee should charge exactly the unrounded buy cost, no markup");
+
+            Config.TRANSACTION_FEE_PERCENT.set(100);
+            long stockBeforeFullFee = Stock.getStock(server, item);
+            long balanceBeforeFullFee = Economy.getBalance(server, player.getUUID());
+            int fullFeeQuoteHash = QuoteHash.of(itemId, stockBeforeFullFee, Stock.getEpoch(server));
+            TradeService.BuyOutcome fullFeeOutcome = TradeService.buy(player, itemId, 1, fullFeeQuoteHash);
+            long fullFeeCharge = balanceBeforeFullFee - Economy.getBalance(server, player.getUUID());
+
+            helper.assertTrue(fullFeeOutcome.success(), "100% fee buy should succeed");
+            helper.assertTrue(fullFeeCharge == Currency.buyCostWithFee(stockBeforeFullFee, 1, 100), "100% fee should charge the fee-adjusted, once-rounded cost");
+        } finally {
+            Config.TRANSACTION_FEE_PERCENT.set(originalFeePercent);
+        }
+
+        helper.succeed();
+    }
+
+    // Exercises docs/spec.md's accept-time re-validation requirement via the actual production guard
+    // (Economy#acceptRequest, also called by GoodsCommand#requestAccept) rather than reimplementing the balance
+    // comparison inline — so a regression that removes or weakens the guard in Economy#acceptRequest itself
+    // fails this test, not just a copy of the check that could silently diverge from production.
+    private static void requestAcceptRevalidatesBalance(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer requester = testPlayer(helper, "request-accept-requester");
+        ServerPlayer payer = testPlayer(helper, "request-accept-payer");
+        long requestAmount = Currency.parseExact("100");
+
+        Economy.give(server, payer.getUUID(), requestAmount);
+        Economy.putRequest(server, new TradeRequest(requester.getUUID(), payer.getUUID(), requestAmount));
+
+        // Balance drops below the pending request's amount after the request was made but before it's accepted.
+        Economy.take(server, payer.getUUID(), Currency.parseExact("50"));
+
+        TradeRequest pending = Economy.findRequest(server, requester.getUUID(), payer.getUUID()).orElse(null);
+        helper.assertTrue(pending != null, "the pending request should still be found at resolution time");
+
+        boolean acceptedWithInsufficientBalance = Economy.acceptRequest(server, pending);
+        helper.assertTrue(!acceptedWithInsufficientBalance, "the real guard must reject an accept when the payer's balance is now insufficient");
+        helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isPresent(),
+                "an insufficient-balance accept must leave the request pending, not silently consume it");
+
+        // Top the payer back up past the amount and confirm the real guard now succeeds and transfers correctly.
+        Economy.give(server, payer.getUUID(), Currency.parseExact("50"));
+        long payerBalanceBefore = Economy.getBalance(server, payer.getUUID());
+        long requesterBalanceBefore = Economy.getBalance(server, requester.getUUID());
+
+        boolean acceptedNow = Economy.acceptRequest(server, pending);
+
+        helper.assertTrue(acceptedNow, "the real guard must accept once the payer's balance is sufficient again");
+        helper.assertTrue(Economy.getBalance(server, payer.getUUID()) == payerBalanceBefore - pending.amount(), "accepted transfer should debit the payer by exactly the request amount");
+        helper.assertTrue(Economy.getBalance(server, requester.getUUID()) == requesterBalanceBefore + pending.amount(), "accepted transfer should credit the requester by exactly the request amount");
+        helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isEmpty(), "the request should be gone once accepted");
+        helper.succeed();
+    }
+
+    // Exercises the data GoodsCommand#metrics reports (docs/spec.md Metrics): total stock value (sum of
+    // log2(n+1)), total currency in circulation, and that per-unit price moves opposite to stock — the item with
+    // less stock prices higher, so "most valuable" is the low-stock end of a stock-ascending sort. Drives
+    // Stock/Economy/Currency directly, the same data metrics() itself reads, rather than parsing chat output.
+    private static void metricsDataAggregatesCorrectly(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer seller = testPlayer(helper, "metrics-seller");
+        Item scarce = Items.GHAST_TEAR;
+        Item plentiful = Items.PUFFERFISH;
+
+        TradeService.sell(seller, new ItemStack(scarce, 1));
+        TradeService.sell(seller, new ItemStack(plentiful, 50));
+        Economy.give(server, seller.getUUID(), Currency.parseExact("1000"));
+
+        Map<Item, Long> stock = Stock.positiveStock(server);
+        helper.assertTrue(stock.containsKey(scarce) && stock.containsKey(plentiful), "both traded items should appear in positive stock");
+
+        double totalStockValue = 0;
+        for (long n : stock.values()) {
+            totalStockValue += Currency.stockValue(n);
+        }
+        helper.assertTrue(totalStockValue > 0, "total stock value should be positive once anything is in stock");
+
+        long circulation = Economy.totalCirculation(server);
+        helper.assertTrue(circulation >= Currency.parseExact("1000"), "circulation should include the currency just given to the seller");
+
+        double scarcePrice = Currency.buyRawCost(stock.get(scarce), 1);
+        double plentifulPrice = Currency.buyRawCost(stock.get(plentiful), 1);
+        helper.assertTrue(scarcePrice > plentifulPrice, "the item with less stock should price higher per unit — 'most valuable' is the low-stock end of the list");
+        helper.succeed();
+    }
+
+    // Exercises /goods give|take|reset's underlying Economy mutations: give/take/reset all persist balance
+    // changes (docs/spec.md), and take floors at 0 rather than driving a balance negative.
+    private static void giveTakeResetMutateBalancesCorrectly(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "admin-balance-ops");
+
+        Economy.give(server, player.getUUID(), Currency.parseExact("100"));
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == Currency.parseExact("100"), "give should credit exactly the given amount to a zero balance");
+
+        Economy.take(server, player.getUUID(), Currency.parseExact("30"));
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == Currency.parseExact("70"), "take should debit exactly the taken amount");
+
+        Economy.take(server, player.getUUID(), Currency.parseExact("1000"));
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "take should floor at 0 rather than going negative");
+
+        Economy.give(server, player.getUUID(), Currency.parseExact("50"));
+        Economy.reset(server, player.getUUID());
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "reset should zero the balance regardless of what it was before");
+        helper.succeed();
+    }
+
+    // Exercises stock consistency when a sell lands between a buyer taking a quote and confirming it — sequential
+    // within GameTest's single-threaded model (see buyingLastUnitIsAtomic's own note on what "concurrent" means
+    // here), but confirms the buyer's now-stale quote is rejected rather than silently repriced, and that a fresh
+    // quote taken afterward succeeds with the stock ledger exactly reflecting both sells and the one buy.
+    private static void sellInterleavedWithBuyKeepsStockConsistent(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer seller = testPlayer(helper, "interleave-seller");
+        ServerPlayer buyer = testPlayer(helper, "interleave-buyer");
+        Item item = Items.NAUTILUS_SHELL;
+        Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
+
+        TradeService.sell(seller, new ItemStack(item, 5));
+        long stockAfterFirstSell = Stock.getStock(server, item);
+        int quoteHash = QuoteHash.of(itemId, stockAfterFirstSell, Stock.getEpoch(server));
+        Economy.give(server, buyer.getUUID(), Currency.parseExact("1000000"));
+
+        // Seller adds more stock after the buyer's quote was taken but before the buyer confirms.
+        TradeService.sell(seller, new ItemStack(item, 3));
+        TradeService.BuyOutcome staleOutcome = TradeService.buy(buyer, itemId, 2, quoteHash);
+        helper.assertTrue(!staleOutcome.success(), "a quote taken before an interleaving sell should be rejected as stale, not silently repriced");
+
+        long stockBeforeBuy = Stock.getStock(server, item);
+        int freshQuoteHash = QuoteHash.of(itemId, stockBeforeBuy, Stock.getEpoch(server));
+        TradeService.BuyOutcome freshOutcome = TradeService.buy(buyer, itemId, 2, freshQuoteHash);
+
+        helper.assertTrue(freshOutcome.success(), "a fresh quote taken after the interleaving sell should succeed");
+        helper.assertTrue(Stock.getStock(server, item) == stockBeforeBuy - 2, "final stock should reflect exactly the net of both sells and the one successful buy");
         helper.succeed();
     }
 

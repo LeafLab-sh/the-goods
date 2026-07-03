@@ -97,8 +97,13 @@ task into `build/generated/sources/modMetadata/`. The `neoforge.mods.toml` lives
 `TheGoodsClient` via `IConfigScreenFactory`.
 
 ### CI/CD
-- `.github/workflows/*.yml` — every action is pinned to a commit SHA (not a version tag), with a `# vX.Y.Z`
-  comment alongside it; keep new/updated actions pinned the same way.
+- `.github/actions/setup-build-env/` — a local composite action (JDK 25 + Gradle setup) shared by both workflows
+  below. Checkout is deliberately NOT part of it — GitHub Actions must already have the repo checked out to even
+  resolve a local `uses: ./path` reference, so each workflow keeps its own checkout step before referencing this
+  action.
+- `.github/workflows/*.yml` — every third-party action (inside the composite action or a workflow directly) is
+  pinned to a commit SHA (not a version tag), with a `# vX.Y.Z` comment alongside it; keep new/updated actions
+  pinned the same way.
 - Pushing a tag matching `v*.*.*` triggers `release.yml`: builds, runs both test suites, creates a GitHub
   Release, and publishes to CurseForge. The tag itself is the version — it overrides `mod_version` at build
   time, so `gradle.properties`'s value never needs to be kept in sync with it.

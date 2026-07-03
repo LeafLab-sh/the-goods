@@ -5,7 +5,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.SavedDataStorage;
 
 // Every transaction flushes the save immediately rather than waiting for autosave (see docs/spec.md).
 public final class Economy {
@@ -72,6 +71,24 @@ public final class Economy {
         return removed;
     }
 
+    /**
+     * Attempts to accept {@code pending} (a request already known to exist), re-validating {@code payer}'s
+     * balance at resolution time — it may have dropped since the request was created. This is the single source of
+     * truth for this guard, shared by GoodsCommand#requestAccept and its GameTest coverage, so a regression here
+     * can't silently diverge between production and what's tested.
+     *
+     * @return true if the balance was sufficient and the transfer happened; false if insufficient (the request
+     *         is left untouched, still pending)
+     */
+    public static boolean acceptRequest(MinecraftServer server, TradeRequest pending) {
+        if (getBalance(server, pending.payer()) < pending.amount()) {
+            return false;
+        }
+        removeRequest(server, pending.requester(), pending.payer());
+        transfer(server, pending.payer(), pending.requester(), pending.amount());
+        return true;
+    }
+
     public static List<TradeRequest> incomingRequests(MinecraftServer server, UUID payer) {
         return data(server).incomingRequests(payer);
     }
@@ -83,14 +100,10 @@ public final class Economy {
     // Always fetched from the overworld, never from whatever dimension the caller happens to be in, so there is
     // exactly one economy for the whole server rather than one per dimension.
     private static EconomyData data(MinecraftServer server) {
-        return dataStorage(server).computeIfAbsent(EconomyData.TYPE);
-    }
-
-    private static SavedDataStorage dataStorage(MinecraftServer server) {
-        return server.overworld().getDataStorage();
+        return SavedDataAccess.get(server, EconomyData.TYPE);
     }
 
     private static void flush(MinecraftServer server) {
-        dataStorage(server).saveAndJoin();
+        SavedDataAccess.flush(server);
     }
 }

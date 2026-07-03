@@ -22,8 +22,8 @@ import sh.leaflab.goods.network.CatalogEntry;
 // far more items than the vanilla Slot-array approach would scale to (see docs/trade-hub-menu-design.md). The
 // stock count overlay mirrors Refined Storage's per-tile amount display (ResourceSlotRendering#renderAmount).
 public class CatalogCellWidget extends AbstractWidget {
-    private final CatalogEntry entry;
-    private final ItemStack displayStack;
+    private CatalogEntry entry;
+    private ItemStack displayStack;
     private final Font font;
     // Boolean is "was Shift held" — a shift-click on the store's catalog grid (see docs/spec.md's own "store
     // inventory" framing) adds a full stack to the Buy quantity instead of just selecting the item.
@@ -31,11 +31,19 @@ public class CatalogCellWidget extends AbstractWidget {
 
     public CatalogCellWidget(int x, int y, CatalogEntry entry, Font font, BiConsumer<CatalogEntry, Boolean> onSelect) {
         super(x, y, 18, 18, Component.empty());
+        this.font = font;
+        this.onSelect = onSelect;
+        update(x, y, entry);
+    }
+
+    /** Repositions this cell and rebinds it to a different catalog entry, so CatalogWidget can reuse cell widgets
+     * across scroll ticks and query results instead of reallocating the whole visible grid every time. */
+    public void update(int x, int y, CatalogEntry entry) {
+        this.setX(x);
+        this.setY(y);
         this.entry = entry;
         Item item = BuiltInRegistries.ITEM.getOptional(entry.item()).orElse(Items.AIR);
         this.displayStack = new ItemStack(item);
-        this.font = font;
-        this.onSelect = onSelect;
         this.setTooltip(Tooltip.create(displayStack.getHoverName()));
     }
 

@@ -210,22 +210,33 @@ public class CatalogWidget {
         rebuildVisibleCells();
     }
 
+    // Reuses existing cell widgets in place (repositioned/rebound to a new entry) rather than reallocating the
+    // whole visible grid on every scroll-wheel tick and every query result — this runs continuously while the
+    // mouse wheel is held, and each cell carries an ItemStack + Tooltip that's cheap but not free to recreate.
     private void rebuildVisibleCells() {
-        for (CatalogCellWidget cell : cells) {
-            removeWidget.accept(cell);
-        }
-        cells.clear();
-
         int firstRow = (int) scrollbar.getOffset();
         int start = firstRow * GRID_COLS;
         int end = Math.min(start + GRID_ROWS * GRID_COLS, allEntries.size());
-        for (int i = start; i < end; i++) {
-            int indexInView = i - start;
+        int visibleCount = end - start;
+
+        while (cells.size() > visibleCount) {
+            removeWidget.accept(cells.remove(cells.size() - 1));
+        }
+
+        for (int i = 0; i < visibleCount; i++) {
+            int indexInView = i;
             int col = indexInView % GRID_COLS;
             int row = indexInView / GRID_COLS;
-            CatalogCellWidget cell = new CatalogCellWidget(x + col * CELL_SIZE, gridY() + row * CELL_SIZE, allEntries.get(i), font, onSelect);
-            cells.add(cell);
-            addWidget.accept(cell);
+            int cellX = x + col * CELL_SIZE;
+            int cellY = gridY() + row * CELL_SIZE;
+            CatalogEntry entry = allEntries.get(start + i);
+            if (i < cells.size()) {
+                cells.get(i).update(cellX, cellY, entry);
+            } else {
+                CatalogCellWidget cell = new CatalogCellWidget(cellX, cellY, entry, font, onSelect);
+                cells.add(cell);
+                addWidget.accept(cell);
+            }
         }
     }
 
