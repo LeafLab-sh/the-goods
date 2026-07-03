@@ -5,7 +5,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.SavedDataStorage;
 
 // Every transaction flushes the save immediately rather than waiting for autosave (see docs/spec.md).
 public final class Economy {
@@ -83,14 +82,10 @@ public final class Economy {
     // Always fetched from the overworld, never from whatever dimension the caller happens to be in, so there is
     // exactly one economy for the whole server rather than one per dimension.
     private static EconomyData data(MinecraftServer server) {
-        return dataStorage(server).computeIfAbsent(EconomyData.TYPE);
-    }
-
-    private static SavedDataStorage dataStorage(MinecraftServer server) {
-        return server.overworld().getDataStorage();
+        return SavedDataAccess.get(server, EconomyData.TYPE);
     }
 
     private static void flush(MinecraftServer server) {
-        dataStorage(server).saveAndJoin();
+        SavedDataAccess.flush(server);
     }
 }
