@@ -75,6 +75,8 @@ public final class EconomyGameTests {
             register("metrics_data_aggregates_correctly", EconomyGameTests::metricsDataAggregatesCorrectly);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY =
             register("give_take_reset_mutate_balances_correctly", EconomyGameTests::giveTakeResetMutateBalancesCorrectly);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT =
+            register("sell_interleaved_with_buy_keeps_stock_consistent", EconomyGameTests::sellInterleavedWithBuyKeepsStockConsistent);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -87,7 +89,8 @@ public final class EconomyGameTests {
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
                 INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
-                REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY, GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY)) {
+                REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY, GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY,
+                SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -391,6 +394,36 @@ public final class EconomyGameTests {
         Economy.give(server, player.getUUID(), Currency.parseExact("50"));
         Economy.reset(server, player.getUUID());
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "reset should zero the balance regardless of what it was before");
+        helper.succeed();
+    }
+
+    // Exercises stock consistency when a sell lands between a buyer taking a quote and confirming it — sequential
+    // within GameTest's single-threaded model (see buyingLastUnitIsAtomic's own note on what "concurrent" means
+    // here), but confirms the buyer's now-stale quote is rejected rather than silently repriced, and that a fresh
+    // quote taken afterward succeeds with the stock ledger exactly reflecting both sells and the one buy.
+    private static void sellInterleavedWithBuyKeepsStockConsistent(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer seller = testPlayer(helper, "interleave-seller");
+        ServerPlayer buyer = testPlayer(helper, "interleave-buyer");
+        Item item = Items.NAUTILUS_SHELL;
+        Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
+
+        TradeService.sell(seller, new ItemStack(item, 5));
+        long stockAfterFirstSell = Stock.getStock(server, item);
+        int quoteHash = QuoteHash.of(itemId, stockAfterFirstSell, Stock.getEpoch(server));
+        Economy.give(server, buyer.getUUID(), Currency.parseExact("1000000"));
+
+        // Seller adds more stock after the buyer's quote was taken but before the buyer confirms.
+        TradeService.sell(seller, new ItemStack(item, 3));
+        TradeService.BuyOutcome staleOutcome = TradeService.buy(buyer, itemId, 2, quoteHash);
+        helper.assertTrue(!staleOutcome.success(), "a quote taken before an interleaving sell should be rejected as stale, not silently repriced");
+
+        long stockBeforeBuy = Stock.getStock(server, item);
+        int freshQuoteHash = QuoteHash.of(itemId, stockBeforeBuy, Stock.getEpoch(server));
+        TradeService.BuyOutcome freshOutcome = TradeService.buy(buyer, itemId, 2, freshQuoteHash);
+
+        helper.assertTrue(freshOutcome.success(), "a fresh quote taken after the interleaving sell should succeed");
+        helper.assertTrue(Stock.getStock(server, item) == stockBeforeBuy - 2, "final stock should reflect exactly the net of both sells and the one successful buy");
         helper.succeed();
     }
 
