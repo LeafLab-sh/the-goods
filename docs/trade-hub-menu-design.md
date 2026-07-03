@@ -12,32 +12,41 @@ underlying economic rules this menu implements — this doc covers only the menu
 
 ## Architecture & Screen Layout
 
-`TradeHubMenu` (`AbstractContainerMenu`) + `TradeHubScreen` (`AbstractContainerScreen`), three pieces sharing one
-screen:
+`TradeHubMenu` (`AbstractContainerMenu`) + `TradeHubScreen` (`AbstractContainerScreen`), restyled after Refined
+Storage's grid screen (see the UI pass notes in `docs/implementation-plan.md` Milestone 6):
 
 ```
 ┌─────────────────────────────────────────┐
-│  [search box______]            Balance:  │
-│  ┌───────────────────────────┐  1,234.56 │
-│  │  catalog icon grid         │           │
-│  │  (scrollable)               │  ▲       │
-│  │                             │  ▼ scroll │
-│  └───────────────────────────┘           │
-│                                            │
-│              [ Sell Slot ]                │
-│                                            │
+│  [search icon][search box___]   (title)  │
+│┌ ┐ ┌───────────────────────────────────┐ │
+│└ ┘ │  catalog icon grid (9x4, scrollable)│▐│
+│┌ ┐ └───────────────────────────────────┘ │
+│└ ┘                                        │
+│  Sell         │  Buy                     │
+│  [Sell Slot]  │  [item icon] name...      │
+│  balance/price│  [-][+][Max]              │
+│               │  qty / available          │
+│               │  total cost               │
+│               │  [Confirm]                │
 │  [ player inventory 3x9 ]                 │
 │  [ hotbar ]                                │
 └─────────────────────────────────────────┘
 ```
 
-- **Catalog widget** (top): custom-drawn, not `Slot`-backed — search bar, sort control (Name/Price/Stock,
-  asc/desc; travels in `CatalogQueryPacket` so pages come back pre-sorted, not just client re-ordered), and
-  scrollable icon grid. 0-stock items are excluded (reappear once sold in). Clicking an icon opens a **Buy
-  Dialog** overlay with quantity controls, a receipt-style cost breakdown (see Buying Flow), and Confirm.
-- **Sell Slot** (middle): one real `Slot` subclass (`SellSlot`) that processes on insert; drag-drop and
-  shift-click both work.
-- **Player inventory** (bottom): standard vanilla slots.
+- **Catalog widget** (top): custom-drawn, not `Slot`-backed. Search bar shares its row with the screen title;
+  sort mode/direction are floating side buttons to the left of the panel (mirroring Refined Storage's
+  `AbstractBaseScreen#addSideButton`); a 9-column scrollable icon grid (9 columns to match the imported Refined
+  Storage `grid/row` sprite's native 162px width) with a real drag/wheel scrollbar (`ScrollbarWidget`), not
+  pagination buttons. 0-stock items are excluded (reappear once sold in).
+- **Sell side** (bottom-left): a "Sell" heading, the `SellSlot`, and — in Quick Sell mode — the balance readout
+  below it, or — in Sell Dialog mode — the staged item's price above the balance instead (see Selling Flow).
+- **Buy panel** (bottom-right): `BuyDialog`, an **always-visible embedded panel** (not a popup or overlay), with
+  its buttons simply disabled when nothing's selected. Clicking a catalog cell opens it populated with that item;
+  the item name can wrap to more than one line, and everything below it (+/-/Max, receipt, Confirm) shifts down
+  to match (`BuyDialog#recomputeLayout`).
+- **Divider**: a vertical sunken groove at the panel's horizontal midpoint separates the Sell and Buy halves.
+- **Player inventory** (bottom): standard vanilla slots, drawn with the same imported Refined Storage row sprite
+  as the catalog grid.
 
 Rationale: real `Slot`s where real inventory mechanics are needed; the catalog is custom-rendered since global
 stock is a counter, not physical items — same approach as AE2's terminal, Refined Storage, and JEI's item list.
@@ -45,23 +54,28 @@ Scales to any number of item types instead of being capped by `Slot` count.
 
 ## Buying Flow
 
-1. Search box → debounced `CatalogQueryPacket` (search term + sort mode + scroll offset).
-2. Server replies with `CatalogResultPacket`: page of `(itemId, currentStock, unitPriceForBuying1)`.
-3. Client renders icons, then keeps them live via server-pushed `StockUpdatePacket`s (see Networking) instead of
-   polling. Displayed price/stock is a snapshot — Confirm always re-checks live.
-4. Clicking an icon opens the **Buy Dialog**: price-per-item, +/-/max-affordable buttons and typed quantity (both
-   clamped to the lesser of affordable-with-fee and available stock), and a receipt-style breakdown (client-computed,
-   visual only, full precision per `spec.md` Display formatting): **Subtotal** (unit price × quantity) → **Fee**
-   (`TransactionFeePercent` of subtotal) → **Total** (subtotal + fee — the amount actually charged). The client
-   must compute this with the exact same formula as the server (`log1p`/`StrictMath`, per `spec.md` Value
-   Calculation), so the preview never disagrees with the final charge by even the smallest unit.
-5. **Confirm** sends `BuyRequestPacket` (itemId + quantity) — no client-computed price is trusted.
-6. Server re-checks stock atomically, recomputes cost (subtotal + `TransactionFeePercent` fee, ceiling-rounded
-   once per `spec.md` Rounding Strategy), verifies balance/inventory space, then atomically deducts currency,
-   decrements stock, gives items. Displayed balance (suffix-formatted, per `spec.md` Display formatting) updates
-   live, same as the Selling Flow.
-7. If stock/balance/space no longer suffice, the **whole transaction is rejected** — never a partial buy. Dialog
-   refreshes and the player re-confirms.
+1. Search box (debounced ~10 ticks) or a sort-mode/direction side-button click sends a `CatalogQueryPayload`
+   (`search`, `sortKey`, `ascending`) to the server.
+2. Server replies with a `CatalogResultPayload`: the **entire** filtered+sorted result set (not paginated) plus
+   the current `TransactionFeePercent`. The client holds this list and scrolls through it locally by row offset —
+   no per-scroll-tick round trip. Re-sent automatically whenever the server's stock epoch advances while the menu
+   is open (`TradeHubMenu#broadcastChanges`, coalesced once per tick), not via a separate stock-update payload.
+3. Clicking a catalog cell opens/updates the **Buy Dialog** (always visible, not an overlay) with that entry.
+   `-`/`+` step by 1 normally, a full stack on Shift, 10 on Ctrl; Max jumps to the largest quantity affordable at
+   the current fee (`BuyDialog#maxAffordable`, binary-searched since cost isn't linear in quantity).
+   Shift-clicking a catalog cell directly adds a full stack to the current selection instead of just selecting it.
+4. The dialog's receipt line shows the total cost via `Currency.buyCostWithFee(stock, quantity, feePercent)` — the
+   exact same method and formula (`log1p`/`StrictMath`, per `spec.md` Value Calculation) the server uses to
+   charge, so the preview can never disagree with the final charge by even the smallest unit.
+5. **Confirm** sends a `BuyRequestPayload` (`item`, `quantity`, `quoteHash` echoed from the entry the dialog was
+   opened with) — no client-computed price is trusted or transmitted.
+6. Server (`TradeService#buy`) validates, in order: quantity in range, item known, quantity ≤ live stock, quote
+   hash matches the current `itemId+stock+epoch` (else rejected as stale — see Networking), balance sufficient
+   for the fee-adjusted cost, inventory has room — then atomically deducts currency, decrements stock, and gives
+   the items. A `BuyResultPayload` (success + message key) lets the Buy Dialog react without parsing chat; the
+   client's balance and catalog both refresh live via the same per-tick sync as everything else.
+7. If any check fails, the **whole transaction is rejected** — never a partial buy. The dialog stays open on the
+   same entry for the player to retry once a fresh catalog result arrives.
 
 ## Selling Flow
 
@@ -90,43 +104,44 @@ an opt-in for players who want one.
 
 ## Networking, Edge Cases & Testing
 
-**Packets:**
-- `CatalogQueryPacket` (C→S): search term + sort mode + scroll offset.
-- `CatalogResultPacket` (S→C): page of `(itemId, stock, unitPrice, quoteHash)` — see Packet integrity.
-- `BuyRequestPacket` (C→S): itemId + quantity + quoteHash (echoed from the `CatalogResultPacket` the Buy Dialog
-  was opened from).
-- `StockUpdatePacket` (S→C): coalesced once per server tick — not per-transaction — and pushed to every player
-  with a Trade Hub open if any stock changed that tick, regardless of cause. Requires the server to track open
-  `TradeHubMenu`s. Per-tick batching keeps this cheap even once the Depositor block (hopper-fed, higher
-  transaction rate) ships.
-- Balance sync: vanilla `ContainerData` only carries `short`s — balance needs a custom sync packet (or two
-  packed ints) sent on change.
+**Payloads** (`sh.leaflab.goods.network`, all `record`s with a `StreamCodec.composite`/`.map` codec):
+- `CatalogQueryPayload` (C→S): `search`, `sortKey`, `ascending`.
+- `CatalogResultPayload` (S→C): the full filtered+sorted `List<CatalogEntry>` plus `feePercent` — no per-entry
+  unit price field; the client derives price from `stock` via the same `Currency` methods the server uses, so it
+  can never drift.
+- `BuyRequestPayload` (C→S): `item` (Identifier), `quantity`, `quoteHash`.
+- `BuyResultPayload` (S→C): `success`, `messageKey` — lets the Buy Dialog react to the outcome without parsing
+  chat.
+- `BalanceSyncPayload` (S→C): `balance`, sent whenever it changes while a `TradeHubMenu` is open.
+- `SellPreviewPayload` (S→C): `stockBeforeSale`, sent while an item is staged in Sell Dialog mode.
+- `SellDecisionPayload` (C→S): `confirm` — Confirm/Cancel on whatever's currently staged.
+- `SetSellDialogModePayload` (C→S): `enabled` — the Quick Sell / Sell Dialog toggle; purely a UI preference, not
+  a security boundary.
+- There is **no separate stock-update payload**: `TradeHubMenu` remembers each player's last `CatalogQueryPayload`
+  and re-answers it with a fresh `CatalogResultPayload` whenever the stock epoch changes, inside the same per-tick
+  `broadcastChanges()` already used for balance sync — a deliberate simplification from this doc's original
+  per-tick-batched `StockUpdatePacket` design (see `docs/implementation-plan.md` Milestone 6).
 
 **Packet integrity:** `StreamCodec` rejects malformed payloads at decode time, and price is always
-server-recomputed from live stock (step 6) — a forged `BuyRequestPacket` can't buy at an invented price
-regardless. `quoteHash` (short hash of `itemId + stock + unitPrice + quoteEpoch`, sent in `CatalogResultPacket`
-and echoed back) isn't a security boundary — it's a signal for telling ordinary staleness (hash matches a real
-quote, stock just moved since — normal reject-and-refresh) apart from a forged/replayed packet (hash matches
-nothing the server ever sent that client — reject and log as suspicious). `itemId`/`quantity` are validated
-independently either way: registry membership, allow/deny list, and `0 < quantity <= currentStock` — checked
-before any cost is computed, so an out-of-range or overflow-prone `quantity` never reaches the pricing math.
+server-recomputed from live stock (Buying Flow step 6) — a forged `BuyRequestPayload` can't buy at an invented
+price regardless. `QuoteHash.of(itemId, stock, epoch)` (`sh.leaflab.goods.economy.QuoteHash`) hashes
+`itemId + stock + epoch` — no `unitPrice` field — and isn't itself a security boundary: it's a cheap way to tell
+ordinary staleness (hash matches a real quote, stock just moved since — reject and the next catalog refresh
+corrects it) apart from a forged/replayed hash (matches nothing the server ever computed for that item). Either
+way, `itemId`/`quantity` are validated independently before any cost is computed: registry membership,
+`0 < quantity ≤ currentStock`.
 
 **Edge cases:**
-- Full inventory on buy → reject before deducting currency.
-- Stock/price changed between snapshot and confirm → reject and refresh.
-- Sell Slot rejects ineligible item → stays on cursor/in origin slot, no special handling.
-- Sort keys (price, stock) can change while a player is scrolling a sorted page, so an item may shift position,
-  duplicate, or briefly vanish across a page boundary. Accepted as normal shopping-list churn for this catalog's
-  scale — not worth a stable-cursor mechanism.
+- Full inventory on buy → reject before deducting currency (`TradeService#hasInventoryRoom`, checked last so a
+  rejection here never leaves a partial charge).
+- Stock/price changed between the catalog snapshot and Confirm → `quoteHash` mismatch, rejected and the dialog
+  awaits the next catalog refresh rather than silently repricing.
+- Sell Slot rejects an ineligible item → it never leaves the player's inventory/cursor, no special handling
+  needed.
+- Sort keys (price, stock) can change while a player is scrolling a sorted list, so an item may shift position
+  across a page boundary. Accepted as normal shopping-list churn at this catalog's scale — not worth a
+  stable-cursor mechanism.
 
-**Testing:** no unit test runner (per `CLAUDE.md`) — verified via `runGameTestServer`:
-- Sell Slot pays out and updates stock correctly.
-- Ineligible items rejected from Sell Slot.
-- Closing the screen with a Sell Dialog item staged returns it to the player, not lost.
-- Insufficient balance/space buy is fully rejected, no side effects.
-- Concurrent buy/sell on the same item stays atomic (no duplication).
-- `BuyRequestPacket` with a `quoteHash` that was never sent to that client is rejected and logged, not silently
-  repriced.
-- `BuyRequestPacket` with `quantity <= 0` or `quantity > currentStock` is rejected without computing cost.
-- Buy cost at `TransactionFeePercent` of 0% and 100% rounds and charges correctly (boundary values).
-- Catalog results honor each sort mode and exclude 0-stock items.
+**Testing:** `./gradlew test` runs JUnit unit tests for pure logic (`Currency`, no Minecraft dependencies);
+`./gradlew runGameTestServer` runs `EconomyGameTests` for everything that needs a live server/SavedData/item
+registry — see `CLAUDE.md` and `docs/implementation-plan.md` Milestone 7 for the current test list.
