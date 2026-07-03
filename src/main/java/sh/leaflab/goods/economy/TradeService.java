@@ -76,7 +76,10 @@ public final class TradeService {
         }
 
         int feePercent = Config.TRANSACTION_FEE_PERCENT.get();
-        long cost = Currency.buyCostWithFee(stockBefore, quantity, feePercent);
+        // buyRawCost (the expensive StrictMath.log1p call) computed once and reused for both the fee-adjusted
+        // charge and the fee-free baseline below — buyCostWithFee/buyCost would each redo it independently.
+        double rawCost = Currency.buyRawCost(stockBefore, quantity);
+        long cost = Currency.ceilToFixedPoint(rawCost * (1.0 + feePercent / 100.0));
         if (Economy.getBalance(server, player.getUUID()) < cost) {
             return fail(player, "commands.thegoods.buy.insufficient_balance");
         }
@@ -86,9 +89,10 @@ public final class TradeService {
         }
 
         // The fee portion is the difference between what was actually charged and what a 0%-fee purchase of the
-        // same quantity at the same stock level would have cost — both ceil-rounded independently, but that's
-        // fine here since this is a lifetime reporting counter (/goods metrics), not itself a transacted amount.
-        long feeCollected = cost - Currency.buyCost(stockBefore, quantity);
+        // same quantity at the same stock level would have cost — both ceil-rounded independently from the same
+        // raw value, but that's fine here since this is a lifetime reporting counter (/goods metrics), not itself
+        // a transacted amount.
+        long feeCollected = cost - Currency.ceilToFixedPoint(rawCost);
 
         Economy.take(server, player.getUUID(), cost);
         if (feeCollected > 0) {
