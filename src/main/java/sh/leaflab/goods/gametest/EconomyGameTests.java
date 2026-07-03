@@ -1,6 +1,7 @@
 package sh.leaflab.goods.gametest;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -70,6 +71,8 @@ public final class EconomyGameTests {
             register("buy_cost_honors_fee_boundaries", EconomyGameTests::buyCostHonorsFeeBoundaries);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> REQUEST_ACCEPT_REVALIDATES_BALANCE =
             register("request_accept_revalidates_balance", EconomyGameTests::requestAcceptRevalidatesBalance);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> METRICS_DATA_AGGREGATES_CORRECTLY =
+            register("metrics_data_aggregates_correctly", EconomyGameTests::metricsDataAggregatesCorrectly);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -82,7 +85,7 @@ public final class EconomyGameTests {
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
                 INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
-                REQUEST_ACCEPT_REVALIDATES_BALANCE)) {
+                REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -333,6 +336,38 @@ public final class EconomyGameTests {
         helper.assertTrue(Economy.getBalance(server, payer.getUUID()) == payerBalanceBefore - pending.amount(), "accepted transfer should debit the payer by exactly the request amount");
         helper.assertTrue(Economy.getBalance(server, requester.getUUID()) == requesterBalanceBefore + pending.amount(), "accepted transfer should credit the requester by exactly the request amount");
         helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isEmpty(), "the request should be gone once accepted");
+        helper.succeed();
+    }
+
+    // Exercises the data GoodsCommand#metrics reports (docs/spec.md Metrics): total stock value (sum of
+    // log2(n+1)), total currency in circulation, and that per-unit price moves opposite to stock — the item with
+    // less stock prices higher, so "most valuable" is the low-stock end of a stock-ascending sort. Drives
+    // Stock/Economy/Currency directly, the same data metrics() itself reads, rather than parsing chat output.
+    private static void metricsDataAggregatesCorrectly(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer seller = testPlayer(helper, "metrics-seller");
+        Item scarce = Items.GHAST_TEAR;
+        Item plentiful = Items.PUFFERFISH;
+
+        TradeService.sell(seller, new ItemStack(scarce, 1));
+        TradeService.sell(seller, new ItemStack(plentiful, 50));
+        Economy.give(server, seller.getUUID(), Currency.parseExact("1000"));
+
+        Map<Item, Long> stock = Stock.positiveStock(server);
+        helper.assertTrue(stock.containsKey(scarce) && stock.containsKey(plentiful), "both traded items should appear in positive stock");
+
+        double totalStockValue = 0;
+        for (long n : stock.values()) {
+            totalStockValue += Currency.stockValue(n);
+        }
+        helper.assertTrue(totalStockValue > 0, "total stock value should be positive once anything is in stock");
+
+        long circulation = Economy.totalCirculation(server);
+        helper.assertTrue(circulation >= Currency.parseExact("1000"), "circulation should include the currency just given to the seller");
+
+        double scarcePrice = Currency.buyRawCost(stock.get(scarce), 1);
+        double plentifulPrice = Currency.buyRawCost(stock.get(plentiful), 1);
+        helper.assertTrue(scarcePrice > plentifulPrice, "the item with less stock should price higher per unit — 'most valuable' is the low-stock end of the list");
         helper.succeed();
     }
 
