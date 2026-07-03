@@ -73,6 +73,8 @@ public final class EconomyGameTests {
             register("request_accept_revalidates_balance", EconomyGameTests::requestAcceptRevalidatesBalance);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> METRICS_DATA_AGGREGATES_CORRECTLY =
             register("metrics_data_aggregates_correctly", EconomyGameTests::metricsDataAggregatesCorrectly);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY =
+            register("give_take_reset_mutate_balances_correctly", EconomyGameTests::giveTakeResetMutateBalancesCorrectly);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -85,7 +87,7 @@ public final class EconomyGameTests {
                 SELL_PAYS_OUT_AND_INCREMENTS_STOCK, SELL_REJECTS_NON_DEFAULT_COMPONENTS, SELL_DIALOG_STAGED_ITEM_RETURNED_ON_CLOSE,
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
                 INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
-                REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY)) {
+                REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY, GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -368,6 +370,27 @@ public final class EconomyGameTests {
         double scarcePrice = Currency.buyRawCost(stock.get(scarce), 1);
         double plentifulPrice = Currency.buyRawCost(stock.get(plentiful), 1);
         helper.assertTrue(scarcePrice > plentifulPrice, "the item with less stock should price higher per unit — 'most valuable' is the low-stock end of the list");
+        helper.succeed();
+    }
+
+    // Exercises /goods give|take|reset's underlying Economy mutations: give/take/reset all persist balance
+    // changes (docs/spec.md), and take floors at 0 rather than driving a balance negative.
+    private static void giveTakeResetMutateBalancesCorrectly(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "admin-balance-ops");
+
+        Economy.give(server, player.getUUID(), Currency.parseExact("100"));
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == Currency.parseExact("100"), "give should credit exactly the given amount to a zero balance");
+
+        Economy.take(server, player.getUUID(), Currency.parseExact("30"));
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == Currency.parseExact("70"), "take should debit exactly the taken amount");
+
+        Economy.take(server, player.getUUID(), Currency.parseExact("1000"));
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "take should floor at 0 rather than going negative");
+
+        Economy.give(server, player.getUUID(), Currency.parseExact("50"));
+        Economy.reset(server, player.getUUID());
+        helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "reset should zero the balance regardless of what it was before");
         helper.succeed();
     }
 
