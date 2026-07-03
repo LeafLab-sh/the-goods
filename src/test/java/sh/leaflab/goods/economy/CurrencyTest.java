@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Currency has zero Minecraft/NeoForge dependencies, so it's covered by real unit tests rather than GameTest —
 // see CLAUDE.md. Expected fixed-point values below were computed via jshell using the exact same
@@ -145,5 +146,33 @@ class CurrencyTest {
     })
     void formatAbbreviatedMatchesInfiniteStorageCellTierSchemeButFloors(double value, String expected) {
         assertEquals(expected, Currency.formatAbbreviated(value));
+    }
+
+    @Test
+    void buyThenSellRoundTripIsNeverProfitable() {
+        // spec.md: "This makes a buy-then-sell round trip never profitable — break-even at best, at exact
+        // integer log boundaries where there's nothing to round." Buy 5 into a stock of 100, then immediately
+        // sell the same 5 back — floor(sell) must never exceed ceil(buy) for the same quantity/stock window.
+        long stockBefore = 100;
+        long quantity = 5;
+
+        long buyCost = Currency.buyCost(stockBefore, quantity);
+        long stockAfterBuy = stockBefore - quantity;
+        long sellPayout = Currency.sellValue(stockAfterBuy, quantity);
+
+        assertTrue(sellPayout <= buyCost, "selling back what was just bought must never pay out more than it cost");
+    }
+
+    @Test
+    void sellThenBuyRoundTripIsNeverProfitable() {
+        // The other direction: sell 5 into a stock of 100, then immediately buy the same 5 back.
+        long stockBefore = 100;
+        long quantity = 5;
+
+        long sellPayout = Currency.sellValue(stockBefore, quantity);
+        long stockAfterSell = stockBefore + quantity;
+        long buyCost = Currency.buyCost(stockAfterSell, quantity);
+
+        assertTrue(buyCost >= sellPayout, "buying back what was just sold must never cost less than it paid out");
     }
 }
