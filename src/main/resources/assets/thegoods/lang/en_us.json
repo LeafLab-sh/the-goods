@@ -1,6 +1,7 @@
 {
   "itemGroup.thegoods": "The Goods",
   "block.thegoods.trade_hub": "Trade Hub",
+  "block.thegoods.depositor": "Depositor",
   "block.thegoods.trade_hub.not_eligible": "That item can't be traded",
   "block.thegoods.trade_hub.sold": "Sold %s %s for %s",
   "block.thegoods.trade_hub.bought": "Bought %s %s for %s",

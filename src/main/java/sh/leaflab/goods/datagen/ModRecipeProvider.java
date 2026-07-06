@@ -26,6 +26,16 @@ public class ModRecipeProvider extends RecipeProvider {
                 .define('S', Items.STICK)
                 .unlockedBy(getHasName(Items.STICK), has(Items.STICK))
                 .save(output);
+
+        // Depositor: a chest surrounded by iron ingots in a U shape (like a hopper without the center).
+        shaped(RecipeCategory.MISC, TheGoods.DEPOSITOR_ITEM.get())
+                .pattern("III")
+                .pattern("ICI")
+                .pattern(" I ")
+                .define('I', Items.IRON_INGOT)
+                .define('C', Items.CHEST)
+                .unlockedBy(getHasName(Items.CHEST), has(Items.CHEST))
+                .save(output);
     }
 
     public static class Runner extends RecipeProvider.Runner {

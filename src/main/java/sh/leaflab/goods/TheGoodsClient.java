@@ -11,6 +11,7 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
+import sh.leaflab.goods.client.gui.DepositorScreen;
 import sh.leaflab.goods.client.gui.TradeHubScreen;
 import sh.leaflab.goods.registry.ModMenuTypes;
 
@@ -36,5 +37,6 @@ public class TheGoodsClient {
     @SubscribeEvent
     static void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenuTypes.TRADE_HUB.get(), TradeHubScreen::new);
+        event.register(ModMenuTypes.DEPOSITOR.get(), DepositorScreen::new);
     }
 }

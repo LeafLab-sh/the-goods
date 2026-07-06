@@ -21,11 +21,13 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+import sh.leaflab.goods.block.DepositorBlock;
 import sh.leaflab.goods.block.TradeHubBlock;
 import sh.leaflab.goods.command.GoodsCommand;
 import sh.leaflab.goods.datagen.DataGenerators;
 import sh.leaflab.goods.gametest.EconomyGameTests;
 import sh.leaflab.goods.network.NetworkHandler;
+import sh.leaflab.goods.registry.ModBlockEntities;
 import sh.leaflab.goods.registry.ModMenuTypes;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -49,6 +51,12 @@ public class TheGoods {
             .explosionResistance(6.0f));
     public static final DeferredItem<BlockItem> TRADE_HUB_ITEM = ITEMS.registerSimpleBlockItem("trade_hub", TRADE_HUB);
 
+    // The Depositor block: hopper-fed item depositor, auto-sells items into an adjacent Trade Hub.
+    public static final DeferredBlock<DepositorBlock> DEPOSITOR = BLOCKS.registerBlock("depositor", DepositorBlock::new, p -> p
+            .mapColor(MapColor.METAL)
+            .strength(3.0f, 6.0f));
+    public static final DeferredItem<BlockItem> DEPOSITOR_ITEM = ITEMS.registerSimpleBlockItem("depositor", DEPOSITOR);
+
     // Creates a creative tab with the id "thegoods:tab" for the Trade Hub, placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_MODE_TABS.register("tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.thegoods")) //The language key for the title of your CreativeModeTab
@@ -56,6 +64,7 @@ public class TheGoods {
             .icon(() -> TRADE_HUB_ITEM.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 output.accept(TRADE_HUB_ITEM.get());
+                output.accept(DEPOSITOR_ITEM.get());
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
@@ -67,6 +76,9 @@ public class TheGoods {
         ITEMS.register(modEventBus);
         // Register the Deferred Register to the mod event bus so tabs get registered
         CREATIVE_MODE_TABS.register(modEventBus);
+
+        // Register the Deferred Register to the mod event bus so block entity types get registered
+        ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
 
         // Register the Deferred Register to the mod event bus so menu types get registered
         ModMenuTypes.MENU_TYPES.register(modEventBus);

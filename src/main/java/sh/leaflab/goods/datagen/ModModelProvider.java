@@ -16,5 +16,6 @@ public class ModModelProvider extends ModelProvider {
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
         blockModels.createTrivialCube(TheGoods.TRADE_HUB.get());
+        blockModels.createTrivialCube(TheGoods.DEPOSITOR.get());
     }
 }
