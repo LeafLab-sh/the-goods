@@ -3,7 +3,9 @@ package sh.leaflab.goods.economy;
 import java.util.List;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
 
 import sh.leaflab.goods.Config;
@@ -23,18 +25,31 @@ public final class ItemEligibility {
     }
 
     private static boolean isAllowedByConfig(ItemStack stack) {
-        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         List<? extends String> allowList = Config.ITEM_ALLOW_LIST.get();
         if (!allowList.isEmpty()) {
-            return containsItem(allowList, id);
+            return matchesAny(allowList, stack);
         }
-        return !containsItem(Config.ITEM_DENY_LIST.get(), id);
+        return !matchesAny(Config.ITEM_DENY_LIST.get(), stack);
     }
 
-    // Config entries are stored verbatim as the user typed them (e.g. "stick", not normalized to
-    // "minecraft:stick"), so each entry must be re-parsed to a canonical Identifier before comparing — a plain
-    // string comparison against the item's fully-qualified id would silently never match.
-    private static boolean containsItem(List<? extends String> configList, Identifier id) {
-        return configList.stream().anyMatch(entry -> id.equals(Identifier.tryParse(entry)));
+    // Config entries can be plain item ids ("minecraft:stick", "stick") or tag references ("#minecraft:planks",
+    // "#c:foods"). Tag entries are checked via stack.is(tagKey) — any matching tag passes. Plain entries
+    // are compared against the item's registry key as before. Entries are stored verbatim (see Config javadoc
+    // on identifier normalization), so plain entries are re-parsed at each check.
+    private static boolean matchesAny(List<? extends String> configList, ItemStack stack) {
+        for (String entry : configList) {
+            if (entry.startsWith("#")) {
+                Identifier tagId = Identifier.tryParse(entry.substring(1));
+                if (tagId != null && stack.is(TagKey.create(Registries.ITEM, tagId))) {
+                    return true;
+                }
+            } else {
+                Identifier itemId = Identifier.tryParse(entry);
+                if (itemId != null && BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(itemId)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

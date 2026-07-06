@@ -32,10 +32,18 @@ public class Config {
     // Still fails hard on an invalid entry (crashes config loading) rather than silently correcting it away, but
     // logs a specific, readable reason first — Identifier.parse()'s own IdentifierException on malformed input is
     // accurate but terse, and "not a registered item" isn't distinguished from "not parseable" at all otherwise.
+    // Tag references (prefix #) are accepted and validated as proper tag keys.
     private static boolean validateItemName(final Object obj) {
         if (!(obj instanceof String itemName)) {
             TheGoods.LOGGER.error("Invalid itemDenyList/itemAllowList entry (expected a string): {}", obj);
             throw new IllegalArgumentException("Invalid itemDenyList/itemAllowList entry (expected a string): " + obj);
+        }
+        if (itemName.startsWith("#")) {
+            if (Identifier.tryParse(itemName.substring(1)) == null) {
+                TheGoods.LOGGER.error("Invalid itemDenyList/itemAllowList entry: '{}' is not a valid tag id", itemName);
+                throw new IllegalArgumentException("Invalid itemDenyList/itemAllowList entry: '" + itemName + "' is not a valid tag id");
+            }
+            return true;
         }
         Identifier id = Identifier.tryParse(itemName);
         if (id == null) {
