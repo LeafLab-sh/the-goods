@@ -77,6 +77,14 @@ public final class EconomyGameTests {
             register("give_take_reset_mutate_balances_correctly", EconomyGameTests::giveTakeResetMutateBalancesCorrectly);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT =
             register("sell_interleaved_with_buy_keeps_stock_consistent", EconomyGameTests::sellInterleavedWithBuyKeepsStockConsistent);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> TAG_ALLOW_LIST_BLOCKS_ITEMS_OUTSIDE_TAG =
+            register("tag_allow_list_blocks_items_outside_tag", EconomyGameTests::tagAllowListBlocksItemsOutsideTag);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> TAG_DENY_LIST_BLOCKS_ITEMS_INSIDE_TAG =
+            register("tag_deny_list_blocks_items_inside_tag", EconomyGameTests::tagDenyListBlocksItemsInsideTag);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> TAG_AND_PLAIN_ENTRIES_WORK_TOGETHER =
+            register("tag_and_plain_entries_work_together", EconomyGameTests::tagAndPlainEntriesWorkTogether);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> NON_TAG_ENTRIES_STILL_WORK =
+            register("non_tag_entries_still_work", EconomyGameTests::nonTagEntriesStillWork);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -90,7 +98,9 @@ public final class EconomyGameTests {
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
                 INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
                 REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY, GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY,
-                SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT)) {
+                SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT,
+                TAG_ALLOW_LIST_BLOCKS_ITEMS_OUTSIDE_TAG, TAG_DENY_LIST_BLOCKS_ITEMS_INSIDE_TAG,
+                TAG_AND_PLAIN_ENTRIES_WORK_TOGETHER, NON_TAG_ENTRIES_STILL_WORK)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -424,6 +434,113 @@ public final class EconomyGameTests {
 
         helper.assertTrue(freshOutcome.success(), "a fresh quote taken after the interleaving sell should succeed");
         helper.assertTrue(Stock.getStock(server, item) == stockBeforeBuy - 2, "final stock should reflect exactly the net of both sells and the one successful buy");
+        helper.succeed();
+    }
+
+    // When the allow list is a tag (e.g. #minecraft:planks), only items in that tag should be sellable.
+    // Restores the original allow list in a finally block so no test leaks a changed config.
+    private static void tagAllowListBlocksItemsOutsideTag(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "tag-allow");
+        Item inTag = Items.SPRUCE_PLANKS;
+        Item outsideTag = Items.PAPER;
+        List<? extends String> originalAllowList = Config.ITEM_ALLOW_LIST.get();
+        List<? extends String> originalDenyList = Config.ITEM_DENY_LIST.get();
+
+        try {
+            Config.ITEM_ALLOW_LIST.set(List.of("#minecraft:planks"));
+            Config.ITEM_DENY_LIST.set(List.of());
+
+            boolean inTagSold = TradeService.sell(player, new ItemStack(inTag, 1));
+            boolean outsideTagSold = TradeService.sell(player, new ItemStack(outsideTag, 1));
+
+            helper.assertTrue(inTagSold, "an item in #minecraft:planks should be sellable when the allow list is that tag");
+            helper.assertTrue(!outsideTagSold, "an item outside #minecraft:planks should be rejected when the allow list is that tag");
+        } finally {
+            Config.ITEM_ALLOW_LIST.set(originalAllowList);
+            Config.ITEM_DENY_LIST.set(originalDenyList);
+        }
+        helper.succeed();
+    }
+
+    // When the deny list is a tag (e.g. #minecraft:logs), items in that tag should be blocked from selling
+    // while items outside the tag can still be sold. Restores config in a finally block.
+    private static void tagDenyListBlocksItemsInsideTag(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "tag-deny");
+        Item inTag = Items.OAK_LOG;
+        Item outsideTag = Items.BAMBOO;
+        List<? extends String> originalAllowList = Config.ITEM_ALLOW_LIST.get();
+        List<? extends String> originalDenyList = Config.ITEM_DENY_LIST.get();
+
+        try {
+            Config.ITEM_ALLOW_LIST.set(List.of());
+            Config.ITEM_DENY_LIST.set(List.of("#minecraft:logs"));
+
+            boolean inTagSold = TradeService.sell(player, new ItemStack(inTag, 1));
+            boolean outsideTagSold = TradeService.sell(player, new ItemStack(outsideTag, 1));
+
+            helper.assertTrue(!inTagSold, "an item in #minecraft:logs should be blocked when the deny list is that tag");
+            helper.assertTrue(outsideTagSold, "an item outside #minecraft:logs should still be sellable when the deny list is that tag");
+        } finally {
+            Config.ITEM_ALLOW_LIST.set(originalAllowList);
+            Config.ITEM_DENY_LIST.set(originalDenyList);
+        }
+        helper.succeed();
+    }
+
+    // Mix of tag and plain entries in the same allow list: both the tagged group and the specific item should
+    // pass, while an item matching neither should be rejected. Restores config in a finally block.
+    private static void tagAndPlainEntriesWorkTogether(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "tag-and-plain");
+        Item tagMatch = Items.DARK_OAK_PLANKS;
+        Item plainMatch = Items.BRICK;
+        Item neither = Items.SUGAR;
+        List<? extends String> originalAllowList = Config.ITEM_ALLOW_LIST.get();
+        List<? extends String> originalDenyList = Config.ITEM_DENY_LIST.get();
+
+        try {
+            Config.ITEM_ALLOW_LIST.set(List.of("#minecraft:planks", "minecraft:brick"));
+            Config.ITEM_DENY_LIST.set(List.of());
+
+            boolean tagMatchSold = TradeService.sell(player, new ItemStack(tagMatch, 1));
+            boolean plainMatchSold = TradeService.sell(player, new ItemStack(plainMatch, 1));
+            boolean neitherSold = TradeService.sell(player, new ItemStack(neither, 1));
+
+            helper.assertTrue(tagMatchSold, "an item matching a tag entry in the allow list should be sellable");
+            helper.assertTrue(plainMatchSold, "an item matching a plain entry in the allow list should be sellable");
+            helper.assertTrue(!neitherSold, "an item matching neither a tag nor a plain entry should be rejected");
+        } finally {
+            Config.ITEM_ALLOW_LIST.set(originalAllowList);
+            Config.ITEM_DENY_LIST.set(originalDenyList);
+        }
+        helper.succeed();
+    }
+
+    // Plain (non-tag) entries still work as before when no tag references are present — existing configs
+    // that only list specific items must continue to work unchanged.
+    private static void nonTagEntriesStillWork(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "plain-entries");
+        Item allowed = Items.HONEYCOMB;
+        Item blocked = Items.CHERRY_PLANKS;
+        List<? extends String> originalAllowList = Config.ITEM_ALLOW_LIST.get();
+        List<? extends String> originalDenyList = Config.ITEM_DENY_LIST.get();
+
+        try {
+            Config.ITEM_ALLOW_LIST.set(List.of("minecraft:honeycomb"));
+            Config.ITEM_DENY_LIST.set(List.of());
+
+            boolean allowedSold = TradeService.sell(player, new ItemStack(allowed, 1));
+            boolean blockedSold = TradeService.sell(player, new ItemStack(blocked, 1));
+
+            helper.assertTrue(allowedSold, "an item in a plain-entry allow list should be sellable");
+            helper.assertTrue(!blockedSold, "an item outside a plain-entry allow list should be rejected");
+        } finally {
+            Config.ITEM_ALLOW_LIST.set(originalAllowList);
+            Config.ITEM_DENY_LIST.set(originalDenyList);
+        }
         helper.succeed();
     }
 
