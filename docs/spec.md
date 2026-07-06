@@ -2,15 +2,32 @@
 
 ## Concept
 
-The world's stock is global and server-wide: every Trade Hub is a window into the same shared inventory.
-Narratively, players are trading with an off-world spaceship (or another dimension) that holds the actual stock.
+The world's stock is organized into named networks and local markets. A **Trade Hub** by itself is a
+self-contained local market with its own isolated inventory. Placing a **Network Connector** block
+adjacent to a Trade Hub (touching any face) connects it to a named network, sharing stock with every
+other Trade Hub on the same network name. All markets use the same global currency — the network
+affects stock scope only.
+
+Narratively, players are trading with an off-world spaceship (or another dimension). A Trade Hub
+without a connector is a small independent outpost with its own local stash; a hub wired to a Network
+Connector is linked into a shared supply chain spanning every hub on that network.
 
 ## Blocks
 
 - **Trade Hub** block placed in world. Interacting with any side opens the trade interface. First version: direct
   player interaction only, no automated/hopper-fed deposit (see Future Ideas).
-- **Obtainable via crafting**, appears in a creative mode tab. **Temporary recipe** (placeholder, not balanced): a
-  hollow 3×3 box of sticks (8 border slots filled, center empty) yields 1 Trade Hub.
+  - **Without** an adjacent Network Connector: operates as a **local market** with its own isolated stock.
+    Stock is keyed by the hub's position and persists as long as the block stays in place.
+  - **With** a Network Connector touching any face: shares stock with every other hub connected to the same
+    network name. The connector is detected on each menu open; adding or removing a connector between opens
+    changes the hub's scope.
+- **Network Connector** placed adjacent to a Trade Hub. Right-clicking opens a configuration screen to set
+  the network name. Multiple connectors with the same name link their respective hubs into one shared stock
+  pool. Does nothing on its own without a Trade Hub.
+- Both blocks are **obtainable via crafting**, appear in the creative mode tab. **Temporary recipes** (placeholder,
+  not balanced):
+  - Trade Hub: a hollow 3×3 box of sticks (8 border slots filled, center empty) yields 1 Trade Hub.
+  - Network Connector: a stick above a redstone dust (vertical line) yields 1 Network Connector.
 
 ## Slash Commands
 
@@ -88,6 +105,11 @@ open interface.
 that would exceed the max simply saturates at the max — same overflow policy as balances (see Overflow below)
 — rather than wrapping or erroring.
 
+**Stock scoping**: stock is partitioned by a **scope** string. A standalone hub uses a scope derived from its
+block position (`local:<dim>:<x>:<y>:<z>`). A connector-linked hub uses `network:<name>`, sharing stock
+with all hubs on the same `<name>`. The persisted `StockData` schema version was bumped from v1→v2 for this;
+existing v1 data (single global stock) is migrated to the `network:global` scope automatically.
+
 **Concurrency**: trades against shared stock are atomic — concurrent trades on the same item can't both succeed
 against stock only one should have gotten.
 
@@ -151,7 +173,7 @@ Abbreviation always **floors**, so a display never overstates spendable value.
 
 These are explicitly out of scope for the initial implementation but worth revisiting later:
 
-- **Per-hub stock and currencies**: instead of one global stock, let individual Trade Hubs maintain independent stock, optionally with their own currency or a configured exchange rate against the server currency. Would open the door to a banking/exchange-rate system between hubs.
+- **Per-hub currencies**: Instead of all markets sharing the global currency, allow local hubs or networks to use their own currency or a configured exchange rate. Would open the door to a banking/exchange-rate system between networks.
 - **Depositor block** (automated deposits): a block that attaches to the Trade Hub and enables automatic transfer of items into the system via hopper/item pipe, crediting currency to the placer's account as items are transferred. Design notes for when it's picked up:
   - Items rejected by `ItemAllowList`/`ItemDenyList` (or that aren't stackable) are **not** consumed — a rejected item fills whatever input slot the inserter tried to place it in, and that slot stays blocked while other slots keep accepting deposits normally. Only once every slot is blocked does the Depositor stop accepting deposits, matching how a vanilla hopper refuses to push into a full inventory.
   - When fully blocked, the Depositor should output a redstone signal the same way a vanilla hopper/container reads as "full" to a comparator.

@@ -148,7 +148,7 @@ public final class GoodsCommand {
     // docs/spec.md, only /goods balance and a trade about to be confirmed ever show full 10-decimal precision.
     private static int metrics(CommandContext<CommandSourceStack> ctx) {
         MinecraftServer server = ctx.getSource().getServer();
-        Map<Item, Long> stock = Stock.positiveStock(server);
+        Map<Item, Long> stock = Stock.positiveStockAll(server);
 
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.header"), false);
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.metrics.item_types", stock.size()), false);

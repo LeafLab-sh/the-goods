@@ -5,6 +5,9 @@
   "block.thegoods.trade_hub.sold": "Sold %s %s for %s",
   "block.thegoods.trade_hub.bought": "Bought %s %s for %s",
 
+  "block.thegoods.network_connector": "Network Connector",
+  "gui.thegoods.network_connector.done": "Done",
+
   "gui.thegoods.trade_hub.sell_heading": "Sell",
 
   "gui.thegoods.catalog.search": "Search",

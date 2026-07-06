@@ -18,10 +18,11 @@ public class ModBlockLootSubProvider extends BlockLootSubProvider {
     @Override
     protected void generate() {
         dropSelf(TheGoods.TRADE_HUB.get());
+        dropSelf(TheGoods.NETWORK_CONNECTOR.get());
     }
 
     @Override
     protected Iterable<Block> getKnownBlocks() {
-        return List.of(TheGoods.TRADE_HUB.get());
+        return List.of(TheGoods.TRADE_HUB.get(), TheGoods.NETWORK_CONNECTOR.get());
     }
 }
