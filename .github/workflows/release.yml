@@ -44,6 +44,14 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes
 
+      # CurseForge: publish only the main JAR, not the -api.jar. We find the non-API jar
+      # by listing build/libs/ and excluding anything with "-api" in the name.
+      - name: Find main jar for CurseForge
+        id: find_jar
+        run: |
+          main_jar=$(find build/libs -name 'thegoods-neoforge-*.jar' ! -name '*-api.jar')
+          echo "main_jar=$main_jar" >> "$GITHUB_OUTPUT"
+
       # Runs after the GitHub Release exists so it can reuse that release's title/changelog for CurseForge too.
       # loaders/game-versions/dependencies are read automatically from the jar's own neoforge.mods.toml — no
       # need to duplicate them here (see https://github.com/Kira-NT/mc-publish#-inputs for what's auto-resolved).
@@ -52,3 +60,4 @@ jobs:
         with:
           curseforge-id: 1595080
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: ${{ steps.find_jar.outputs.main_jar }}

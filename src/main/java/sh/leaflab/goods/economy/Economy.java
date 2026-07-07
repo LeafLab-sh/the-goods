@@ -5,6 +5,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import net.minecraft.server.MinecraftServer;
+import net.neoforged.neoforge.common.NeoForge;
+
+import sh.leaflab.goods.api.TradeRequest;
+import sh.leaflab.goods.api.event.AdminActionEvent;
+import sh.leaflab.goods.api.event.CurrencyTransferredEvent;
 
 // Every transaction flushes the save immediately rather than waiting for autosave (see docs/spec.md).
 public final class Economy {
@@ -15,21 +20,24 @@ public final class Economy {
         return data(server).getBalance(player);
     }
 
-    public static void give(MinecraftServer server, UUID player, long amount) {
+    public static void give(MinecraftServer server, UUID actor, UUID player, long amount) {
         EconomyData data = data(server);
         data.setBalance(player, Currency.saturatingAdd(data.getBalance(player), amount));
         flush(server);
+        NeoForge.EVENT_BUS.post(new AdminActionEvent("GIVE", actor, player, amount));
     }
 
-    public static void take(MinecraftServer server, UUID player, long amount) {
+    public static void take(MinecraftServer server, UUID actor, UUID player, long amount) {
         EconomyData data = data(server);
         data.setBalance(player, Math.max(0L, data.getBalance(player) - amount));
         flush(server);
+        NeoForge.EVENT_BUS.post(new AdminActionEvent("TAKE", actor, player, amount));
     }
 
-    public static void reset(MinecraftServer server, UUID player) {
+    public static void reset(MinecraftServer server, UUID actor, UUID player) {
         data(server).setBalance(player, 0L);
         flush(server);
+        NeoForge.EVENT_BUS.post(new AdminActionEvent("RESET", actor, player, 0L));
     }
 
     public static long totalCirculation(MinecraftServer server) {
@@ -51,6 +59,7 @@ public final class Economy {
         data.setBalance(from, Math.max(0L, data.getBalance(from) - amount));
         data.setBalance(to, Currency.saturatingAdd(data.getBalance(to), amount));
         flush(server);
+        NeoForge.EVENT_BUS.post(new CurrencyTransferredEvent("PAY", from, to, amount));
     }
 
     public static Optional<TradeRequest> findRequest(MinecraftServer server, UUID requester, UUID payer) {
@@ -85,7 +94,11 @@ public final class Economy {
             return false;
         }
         removeRequest(server, pending.requester(), pending.payer());
-        transfer(server, pending.payer(), pending.requester(), pending.amount());
+        EconomyData data = data(server);
+        data.setBalance(pending.payer(), Math.max(0L, data.getBalance(pending.payer()) - pending.amount()));
+        data.setBalance(pending.requester(), Currency.saturatingAdd(data.getBalance(pending.requester()), pending.amount()));
+        flush(server);
+        NeoForge.EVENT_BUS.post(new CurrencyTransferredEvent("REQUEST_ACCEPT", pending.payer(), pending.requester(), pending.amount()));
         return true;
     }
 

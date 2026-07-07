@@ -14,8 +14,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.common.NeoForge;
 
 import sh.leaflab.goods.Config;
+import sh.leaflab.goods.api.event.ItemBoughtEvent;
+import sh.leaflab.goods.api.event.ItemSoldEvent;
 import sh.leaflab.goods.network.CatalogEntry;
 
 // The single entry point for both trade directions — reused by the Sell Slot GUI (Milestone 5) and the catalog
@@ -43,11 +46,14 @@ public final class TradeService {
         long stockBefore = Stock.getStock(server, item);
         long payout = Currency.sellValue(stockBefore, quantity);
 
-        Economy.give(server, player.getUUID(), payout);
+        Economy.give(server, player.getUUID(), player.getUUID(), payout);
         Stock.credit(server, item, quantity);
 
         player.sendSystemMessage(Component.translatable(
                 "block.thegoods.trade_hub.sold", quantity, stack.getHoverName(), Currency.format(payout)));
+
+        NeoForge.EVENT_BUS.post(new ItemSoldEvent(player, stack, quantity, payout,
+                Stock.getStock(server, item)));
         return true;
     }
 
@@ -94,11 +100,14 @@ public final class TradeService {
         // a transacted amount.
         long feeCollected = cost - Currency.ceilToFixedPoint(rawCost);
 
-        Economy.take(server, player.getUUID(), cost);
+        Economy.take(server, player.getUUID(), player.getUUID(), cost);
         if (feeCollected > 0) {
             Economy.addLifetimeFees(server, feeCollected);
         }
         Stock.debit(server, item, quantity);
+
+        NeoForge.EVENT_BUS.post(new ItemBoughtEvent(player, item, quantity, cost,
+                feePercent, feeCollected > 0 ? feeCollected : 0, Stock.getStock(server, item)));
 
         long remaining = quantity;
         int maxStackSize = new ItemStack(item).getMaxStackSize();
