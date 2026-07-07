@@ -101,6 +101,8 @@ task into `build/generated/sources/modMetadata/`. The `neoforge.mods.toml` lives
   below. Checkout is deliberately NOT part of it — GitHub Actions must already have the repo checked out to even
   resolve a local `uses: ./path` reference, so each workflow keeps its own checkout step before referencing this
   action.
+- `.github/workflows/build-and-test.yml` (the Check workflow) triggers on `push` to `main` only, and on
+  `pull_request` to any branch. This avoids double runs when a feature branch has an open PR.
 - `.github/workflows/*.yml` — every third-party action (inside the composite action or a workflow directly) is
   pinned to a commit SHA (not a version tag), with a `# vX.Y.Z` comment alongside it; keep new/updated actions
   pinned the same way.
