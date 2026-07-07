@@ -78,8 +78,9 @@ Connector is linked into a shared supply chain spanning every hub on that networ
 Interacting with the Trade Hub opens the trade interface: player inventory bottom, store inventory top, balance
 top right. Withdrawing decreases currency; depositing increases it.
 
-Stock is global and shared, so every open Trade Hub reflects the same stock — trades update live across every
-open interface.
+Stock is scoped per position (standalone hub) or per network name (connector-linked hubs), so every open Trade
+Hub reflects whichever scope it resolved to on open — trades update live across every open interface on the
+same scope.
 
 ## Value Calculation
 
