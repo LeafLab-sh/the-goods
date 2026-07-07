@@ -41,6 +41,9 @@ Narratively, players are trading with an off-world spaceship (or another dimensi
 ### Admins Only
 
 - `/goods metrics` — server-wide economy health (see Metrics). Requires op-level 2.
+- `/goods audit [count]` — view the most recent audit log entries (default 10, max 100). Records all
+  GIVE, TAKE, RESET, PAY, REQUEST_ACCEPT, SELL, and BUY actions with timestamps, actor, target, amounts,
+  and item details. Requires op-level 2.
 - `/goods give` / `take [Amount] [PlayerName]` — admin currency injection/removal, not stock-backed. **Debugging
   only.** Requires op-level 4. `take` floors at a balance of 0 — it can never drive a balance negative.
 - `/goods reset [PlayerName]` — wipes a balance. Requires op-level 4.
@@ -55,6 +58,8 @@ Narratively, players are trading with an off-world spaceship (or another dimensi
   lets buyers drain it to 0, but blocks new deposits immediately.
 - **ItemAllowList** — if populated, becomes an exclusive whitelist and `ItemDenyList` is ignored. Empty by
   default.
+- **AuditLogEnabled** — enable/disable the transaction audit log. Default: `true`.
+- **AuditLogMaxEntries** — maximum audit log entries to retain (0 = unlimited). Default: `100`.
 
 ## Menus
 
@@ -159,7 +164,6 @@ These are explicitly out of scope for the initial implementation but worth revis
 - **Configurable value-curve tuning**: the `log2` base is currently fixed. A configurable curve base/scale would let admins tune how quickly the economy "matures" on high-throughput servers.
 - **Admin-seeded initial stock**: a command/config to seed starting stock for select items, for servers that don't want a cold-start economy.
 - **Tag-based allow/deny lists**: letting admins deny e.g. `#minecraft:tools` instead of listing every item individually.
-- **Audit trail for `/goods give`/`/goods take`**: a log of who got given/taken what and by which admin, for accountability.
 - **Per-player metrics command**: an admin command (e.g. `/goods metrics [PlayerName]`) to inspect a specific
   player's balance/transaction history, rather than only server-wide aggregates.
 - **Interoperability API**: expose stock/balance queries (and possibly restricted mutation) to other mods —
