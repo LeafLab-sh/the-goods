@@ -18,13 +18,21 @@ public class ModRecipeProvider extends RecipeProvider {
 
     @Override
     protected void buildRecipes() {
-        // Placeholder, unbalanced recipe (see docs/spec.md): a hollow 3x3 ring of sticks -> 1 Trade Hub.
         shaped(RecipeCategory.MISC, TheGoods.TRADE_HUB_ITEM.get())
                 .pattern("SSS")
                 .pattern("S S")
                 .pattern("SSS")
                 .define('S', Items.STICK)
                 .unlockedBy(getHasName(Items.STICK), has(Items.STICK))
+                .save(output);
+
+        shaped(RecipeCategory.MISC, TheGoods.NETWORK_CONNECTOR_ITEM.get())
+                .pattern(" S ")
+                .pattern(" R ")
+                .pattern("   ")
+                .define('S', Items.STICK)
+                .define('R', Items.REDSTONE)
+                .unlockedBy(getHasName(Items.REDSTONE), has(Items.REDSTONE))
                 .save(output);
     }
 

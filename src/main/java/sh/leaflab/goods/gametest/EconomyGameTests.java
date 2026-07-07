@@ -36,17 +36,14 @@ import sh.leaflab.goods.economy.TradeService;
 import sh.leaflab.goods.menu.TradeHubMenu;
 import sh.leaflab.goods.network.CatalogEntry;
 
-// Automated coverage for docs/spec.md's own enumerated test-plan bullets, for the subset that needs a live
-// MinecraftServer/ServerLevel/SavedData/item registry — see CLAUDE.md. Pure logic (e.g. Currency) has real
-// JUnit unit tests under src/test/java instead; GameTest is for everything that can't run there. Every test
-// uses the "empty" vanilla structure and a no-op environment rather than placing any real blocks. Each test
-// uses its own dedicated vanilla item, never reused across tests, since Stock/Economy SavedData is server-wide
-// (not per-structure) and multiple tests can run concurrently in the same ServerLevel within a batch.
 public final class EconomyGameTests {
     public static final DeferredRegister<Consumer<GameTestHelper>> TEST_FUNCTIONS =
             DeferredRegister.create(BuiltInRegistries.TEST_FUNCTION, TheGoods.MODID);
 
     private static final int MAX_TICKS = 40;
+
+    // All tests use a dedicated test scope so they never collide with each other or with dev state.
+    private static final String TEST_SCOPE = "network:test";
 
     private EconomyGameTests() {
     }
@@ -99,26 +96,20 @@ public final class EconomyGameTests {
     private static void sellPaysOutAndIncrementsStock(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "sell-payout");
-        // Deliberately not a "typical example" item (like a stick) that someone manually testing the
-        // itemDenyList/itemAllowList feature would be likely to type into their local run/config/
-        // thegoods-common.toml — that file is gitignored dev state, not part of the test environment, but an
-        // item collision with it would still make this test spuriously fail locally.
         Item item = Items.RABBIT_FOOT;
 
-        long stockBefore = Stock.getStock(server, item);
+        long stockBefore = Stock.getStock(server, TEST_SCOPE, item);
         long balanceBefore = Economy.getBalance(server, player.getUUID());
         long expectedPayout = Currency.sellValue(stockBefore, 5);
 
-        boolean sold = TradeService.sell(player, new ItemStack(item, 5));
+        boolean sold = TradeService.sell(player, new ItemStack(item, 5), TEST_SCOPE);
 
         helper.assertTrue(sold, "sell should succeed for a plain, eligible stack");
-        helper.assertTrue(Stock.getStock(server, item) == stockBefore + 5, "stock should increase by exactly the quantity sold");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == stockBefore + 5, "stock should increase by exactly the quantity sold");
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == balanceBefore + expectedPayout, "balance should increase by exactly the computed payout");
         helper.succeed();
     }
 
-    // Exercises the anvil-rename exploit docs/spec.md explicitly calls out: a non-default-component stack (here,
-    // a custom-named item) must be rejected outright, not accepted as a "different" zero-stock item.
     private static void sellRejectsNonDefaultComponents(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "sell-ineligible");
@@ -126,13 +117,13 @@ public final class EconomyGameTests {
         ItemStack renamed = new ItemStack(item, 1);
         renamed.set(DataComponents.CUSTOM_NAME, Component.literal("Renamed"));
 
-        long stockBefore = Stock.getStock(server, item);
+        long stockBefore = Stock.getStock(server, TEST_SCOPE, item);
         long balanceBefore = Economy.getBalance(server, player.getUUID());
 
-        boolean sold = TradeService.sell(player, renamed);
+        boolean sold = TradeService.sell(player, renamed, TEST_SCOPE);
 
         helper.assertTrue(!sold, "a renamed (non-default-component) stack should be rejected");
-        helper.assertTrue(Stock.getStock(server, item) == stockBefore, "stock should be unchanged after a rejected sell");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == stockBefore, "stock should be unchanged after a rejected sell");
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == balanceBefore, "balance should be unchanged after a rejected sell");
         helper.succeed();
     }
@@ -160,31 +151,28 @@ public final class EconomyGameTests {
         Item item = Items.GOLD_INGOT;
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
-        TradeService.sell(player, new ItemStack(item, 10));
+        TradeService.sell(player, new ItemStack(item, 10), TEST_SCOPE);
         Economy.reset(server, player.getUUID());
-        long stock = Stock.getStock(server, item);
-        int quoteHash = QuoteHash.of(itemId, stock, Stock.getEpoch(server));
+        long stock = Stock.getStock(server, TEST_SCOPE, item);
+        int quoteHash = QuoteHash.of(itemId, stock, Stock.getEpoch(server, TEST_SCOPE));
 
-        TradeService.BuyOutcome outcome = TradeService.buy(player, itemId, 1, quoteHash);
+        TradeService.BuyOutcome outcome = TradeService.buy(player, itemId, 1, quoteHash, TEST_SCOPE);
 
         helper.assertTrue(!outcome.success(), "buy should fail with a zero balance");
-        helper.assertTrue(Stock.getStock(server, item) == stock, "stock should be unchanged after a rejected buy");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == stock, "stock should be unchanged after a rejected buy");
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "balance should still be zero after a rejected buy");
         helper.succeed();
     }
 
-    // "Concurrent" within GameTest's single-threaded execution model: two buyers sequentially attempt to buy the
-    // same last unit of stock using the same (increasingly stale) quote — only the first should ever succeed,
-    // and stock must never go negative.
     private static void buyingLastUnitIsAtomic(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer seller = testPlayer(helper, "atomic-seller");
         Item item = Items.NETHERITE_INGOT;
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
-        TradeService.sell(seller, new ItemStack(item, 1));
-        long stock = Stock.getStock(server, item);
-        int quoteHash = QuoteHash.of(itemId, stock, Stock.getEpoch(server));
+        TradeService.sell(seller, new ItemStack(item, 1), TEST_SCOPE);
+        long stock = Stock.getStock(server, TEST_SCOPE, item);
+        int quoteHash = QuoteHash.of(itemId, stock, Stock.getEpoch(server, TEST_SCOPE));
 
         ServerPlayer buyerA = testPlayer(helper, "atomic-buyer-a");
         ServerPlayer buyerB = testPlayer(helper, "atomic-buyer-b");
@@ -192,12 +180,12 @@ public final class EconomyGameTests {
         Economy.give(server, buyerA.getUUID(), plenty);
         Economy.give(server, buyerB.getUUID(), plenty);
 
-        TradeService.BuyOutcome outcomeA = TradeService.buy(buyerA, itemId, stock, quoteHash);
-        TradeService.BuyOutcome outcomeB = TradeService.buy(buyerB, itemId, stock, quoteHash);
+        TradeService.BuyOutcome outcomeA = TradeService.buy(buyerA, itemId, stock, quoteHash, TEST_SCOPE);
+        TradeService.BuyOutcome outcomeB = TradeService.buy(buyerB, itemId, stock, quoteHash, TEST_SCOPE);
 
         helper.assertTrue(outcomeA.success(), "the first buyer should successfully buy all remaining stock");
         helper.assertTrue(!outcomeB.success(), "the second buyer should be rejected — stock is already exhausted");
-        helper.assertTrue(Stock.getStock(server, item) == 0, "stock should be exactly zero, never negative");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == 0, "stock should be exactly zero, never negative");
         helper.succeed();
     }
 
@@ -207,16 +195,15 @@ public final class EconomyGameTests {
         Item item = Items.LAPIS_LAZULI;
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
-        TradeService.sell(player, new ItemStack(item, 5));
+        TradeService.sell(player, new ItemStack(item, 5), TEST_SCOPE);
         Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
-        long stock = Stock.getStock(server, item);
+        long stock = Stock.getStock(server, TEST_SCOPE, item);
 
-        // Never equal to a hash this server actually computed and sent to a client.
-        int forgedHash = ~QuoteHash.of(itemId, stock, Stock.getEpoch(server));
-        TradeService.BuyOutcome outcome = TradeService.buy(player, itemId, 1, forgedHash);
+        int forgedHash = ~QuoteHash.of(itemId, stock, Stock.getEpoch(server, TEST_SCOPE));
+        TradeService.BuyOutcome outcome = TradeService.buy(player, itemId, 1, forgedHash, TEST_SCOPE);
 
         helper.assertTrue(!outcome.success(), "a quoteHash that was never issued should be rejected, not silently repriced");
-        helper.assertTrue(Stock.getStock(server, item) == stock, "stock should be unchanged after a rejected buy");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == stock, "stock should be unchanged after a rejected buy");
         helper.succeed();
     }
 
@@ -226,17 +213,17 @@ public final class EconomyGameTests {
         Item item = Items.REDSTONE;
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
-        TradeService.sell(player, new ItemStack(item, 5));
+        TradeService.sell(player, new ItemStack(item, 5), TEST_SCOPE);
         Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
         long balanceBefore = Economy.getBalance(server, player.getUUID());
-        long stockBefore = Stock.getStock(server, item);
+        long stockBefore = Stock.getStock(server, TEST_SCOPE, item);
 
-        TradeService.BuyOutcome outcome = TradeService.buy(player, itemId, 0, 0);
+        TradeService.BuyOutcome outcome = TradeService.buy(player, itemId, 0, 0, TEST_SCOPE);
 
         helper.assertTrue(!outcome.success(), "a zero quantity should be rejected");
         helper.assertTrue(outcome.messageKey().equals("commands.thegoods.buy.invalid_quantity"), "should fail specifically on the invalid-quantity check, before any pricing math");
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == balanceBefore, "balance should be untouched — pricing math never ran");
-        helper.assertTrue(Stock.getStock(server, item) == stockBefore, "stock should be untouched");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == stockBefore, "stock should be untouched");
         helper.succeed();
     }
 
@@ -248,11 +235,11 @@ public final class EconomyGameTests {
         Item high = Items.QUARTZ;
         Item neverSold = Items.PRISMARINE_SHARD;
 
-        TradeService.sell(player, new ItemStack(low, 1));
-        TradeService.sell(player, new ItemStack(mid, 5));
-        TradeService.sell(player, new ItemStack(high, 20));
+        TradeService.sell(player, new ItemStack(low, 1), TEST_SCOPE);
+        TradeService.sell(player, new ItemStack(mid, 5), TEST_SCOPE);
+        TradeService.sell(player, new ItemStack(high, 20), TEST_SCOPE);
 
-        List<CatalogEntry> results = TradeService.queryCatalog(server, "", "stock", true);
+        List<CatalogEntry> results = TradeService.queryCatalog(server, "", "stock", true, TEST_SCOPE);
 
         Identifier neverSoldId = BuiltInRegistries.ITEM.getKey(neverSold);
         helper.assertTrue(results.stream().noneMatch(e -> e.item().equals(neverSoldId)), "an item with 0 stock should never appear in the catalog");
@@ -265,10 +252,6 @@ public final class EconomyGameTests {
         helper.succeed();
     }
 
-    // Exercises docs/spec.md's TransactionFeePercent boundaries (0-100 inclusive): at 0% the buyer pays exactly
-    // the unrounded buy cost, and at 100% the fee doubles the raw cost before the single ceil-rounding step
-    // (never rounded twice — see Currency's own Javadoc on buyCostWithFee). Restores the original config value
-    // in a finally block so this test can't leak a changed fee into any test that runs after it in the batch.
     private static void buyCostHonorsFeeBoundaries(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "fee-boundary");
@@ -276,25 +259,25 @@ public final class EconomyGameTests {
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
         int originalFeePercent = Config.TRANSACTION_FEE_PERCENT.get();
 
-        TradeService.sell(player, new ItemStack(item, 10));
+        TradeService.sell(player, new ItemStack(item, 10), TEST_SCOPE);
         Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
 
         try {
             Config.TRANSACTION_FEE_PERCENT.set(0);
-            long stockBeforeZeroFee = Stock.getStock(server, item);
+            long stockBeforeZeroFee = Stock.getStock(server, TEST_SCOPE, item);
             long balanceBeforeZeroFee = Economy.getBalance(server, player.getUUID());
-            int zeroFeeQuoteHash = QuoteHash.of(itemId, stockBeforeZeroFee, Stock.getEpoch(server));
-            TradeService.BuyOutcome zeroFeeOutcome = TradeService.buy(player, itemId, 1, zeroFeeQuoteHash);
+            int zeroFeeQuoteHash = QuoteHash.of(itemId, stockBeforeZeroFee, Stock.getEpoch(server, TEST_SCOPE));
+            TradeService.BuyOutcome zeroFeeOutcome = TradeService.buy(player, itemId, 1, zeroFeeQuoteHash, TEST_SCOPE);
             long zeroFeeCharge = balanceBeforeZeroFee - Economy.getBalance(server, player.getUUID());
 
             helper.assertTrue(zeroFeeOutcome.success(), "0% fee buy should succeed");
             helper.assertTrue(zeroFeeCharge == Currency.buyCost(stockBeforeZeroFee, 1), "0% fee should charge exactly the unrounded buy cost, no markup");
 
             Config.TRANSACTION_FEE_PERCENT.set(100);
-            long stockBeforeFullFee = Stock.getStock(server, item);
+            long stockBeforeFullFee = Stock.getStock(server, TEST_SCOPE, item);
             long balanceBeforeFullFee = Economy.getBalance(server, player.getUUID());
-            int fullFeeQuoteHash = QuoteHash.of(itemId, stockBeforeFullFee, Stock.getEpoch(server));
-            TradeService.BuyOutcome fullFeeOutcome = TradeService.buy(player, itemId, 1, fullFeeQuoteHash);
+            int fullFeeQuoteHash = QuoteHash.of(itemId, stockBeforeFullFee, Stock.getEpoch(server, TEST_SCOPE));
+            TradeService.BuyOutcome fullFeeOutcome = TradeService.buy(player, itemId, 1, fullFeeQuoteHash, TEST_SCOPE);
             long fullFeeCharge = balanceBeforeFullFee - Economy.getBalance(server, player.getUUID());
 
             helper.assertTrue(fullFeeOutcome.success(), "100% fee buy should succeed");
@@ -306,10 +289,6 @@ public final class EconomyGameTests {
         helper.succeed();
     }
 
-    // Exercises docs/spec.md's accept-time re-validation requirement via the actual production guard
-    // (Economy#acceptRequest, also called by GoodsCommand#requestAccept) rather than reimplementing the balance
-    // comparison inline — so a regression that removes or weakens the guard in Economy#acceptRequest itself
-    // fails this test, not just a copy of the check that could silently diverge from production.
     private static void requestAcceptRevalidatesBalance(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer requester = testPlayer(helper, "request-accept-requester");
@@ -319,7 +298,6 @@ public final class EconomyGameTests {
         Economy.give(server, payer.getUUID(), requestAmount);
         Economy.putRequest(server, new TradeRequest(requester.getUUID(), payer.getUUID(), requestAmount));
 
-        // Balance drops below the pending request's amount after the request was made but before it's accepted.
         Economy.take(server, payer.getUUID(), Currency.parseExact("50"));
 
         TradeRequest pending = Economy.findRequest(server, requester.getUUID(), payer.getUUID()).orElse(null);
@@ -330,7 +308,6 @@ public final class EconomyGameTests {
         helper.assertTrue(Economy.findRequest(server, requester.getUUID(), payer.getUUID()).isPresent(),
                 "an insufficient-balance accept must leave the request pending, not silently consume it");
 
-        // Top the payer back up past the amount and confirm the real guard now succeeds and transfers correctly.
         Economy.give(server, payer.getUUID(), Currency.parseExact("50"));
         long payerBalanceBefore = Economy.getBalance(server, payer.getUUID());
         long requesterBalanceBefore = Economy.getBalance(server, requester.getUUID());
@@ -344,21 +321,17 @@ public final class EconomyGameTests {
         helper.succeed();
     }
 
-    // Exercises the data GoodsCommand#metrics reports (docs/spec.md Metrics): total stock value (sum of
-    // log2(n+1)), total currency in circulation, and that per-unit price moves opposite to stock — the item with
-    // less stock prices higher, so "most valuable" is the low-stock end of a stock-ascending sort. Drives
-    // Stock/Economy/Currency directly, the same data metrics() itself reads, rather than parsing chat output.
     private static void metricsDataAggregatesCorrectly(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer seller = testPlayer(helper, "metrics-seller");
         Item scarce = Items.GHAST_TEAR;
         Item plentiful = Items.PUFFERFISH;
 
-        TradeService.sell(seller, new ItemStack(scarce, 1));
-        TradeService.sell(seller, new ItemStack(plentiful, 50));
+        TradeService.sell(seller, new ItemStack(scarce, 1), TEST_SCOPE);
+        TradeService.sell(seller, new ItemStack(plentiful, 50), TEST_SCOPE);
         Economy.give(server, seller.getUUID(), Currency.parseExact("1000"));
 
-        Map<Item, Long> stock = Stock.positiveStock(server);
+        Map<Item, Long> stock = Stock.positiveStock(server, TEST_SCOPE);
         helper.assertTrue(stock.containsKey(scarce) && stock.containsKey(plentiful), "both traded items should appear in positive stock");
 
         double totalStockValue = 0;
@@ -372,12 +345,10 @@ public final class EconomyGameTests {
 
         double scarcePrice = Currency.buyRawCost(stock.get(scarce), 1);
         double plentifulPrice = Currency.buyRawCost(stock.get(plentiful), 1);
-        helper.assertTrue(scarcePrice > plentifulPrice, "the item with less stock should price higher per unit — 'most valuable' is the low-stock end of the list");
+        helper.assertTrue(scarcePrice > plentifulPrice, "the item with less stock should price higher per unit");
         helper.succeed();
     }
 
-    // Exercises /goods give|take|reset's underlying Economy mutations: give/take/reset all persist balance
-    // changes (docs/spec.md), and take floors at 0 rather than driving a balance negative.
     private static void giveTakeResetMutateBalancesCorrectly(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "admin-balance-ops");
@@ -397,10 +368,6 @@ public final class EconomyGameTests {
         helper.succeed();
     }
 
-    // Exercises stock consistency when a sell lands between a buyer taking a quote and confirming it — sequential
-    // within GameTest's single-threaded model (see buyingLastUnitIsAtomic's own note on what "concurrent" means
-    // here), but confirms the buyer's now-stale quote is rejected rather than silently repriced, and that a fresh
-    // quote taken afterward succeeds with the stock ledger exactly reflecting both sells and the one buy.
     private static void sellInterleavedWithBuyKeepsStockConsistent(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer seller = testPlayer(helper, "interleave-seller");
@@ -408,28 +375,25 @@ public final class EconomyGameTests {
         Item item = Items.NAUTILUS_SHELL;
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
-        TradeService.sell(seller, new ItemStack(item, 5));
-        long stockAfterFirstSell = Stock.getStock(server, item);
-        int quoteHash = QuoteHash.of(itemId, stockAfterFirstSell, Stock.getEpoch(server));
+        TradeService.sell(seller, new ItemStack(item, 5), TEST_SCOPE);
+        long stockAfterFirstSell = Stock.getStock(server, TEST_SCOPE, item);
+        int quoteHash = QuoteHash.of(itemId, stockAfterFirstSell, Stock.getEpoch(server, TEST_SCOPE));
         Economy.give(server, buyer.getUUID(), Currency.parseExact("1000000"));
 
-        // Seller adds more stock after the buyer's quote was taken but before the buyer confirms.
-        TradeService.sell(seller, new ItemStack(item, 3));
-        TradeService.BuyOutcome staleOutcome = TradeService.buy(buyer, itemId, 2, quoteHash);
+        TradeService.sell(seller, new ItemStack(item, 3), TEST_SCOPE);
+        TradeService.BuyOutcome staleOutcome = TradeService.buy(buyer, itemId, 2, quoteHash, TEST_SCOPE);
         helper.assertTrue(!staleOutcome.success(), "a quote taken before an interleaving sell should be rejected as stale, not silently repriced");
 
-        long stockBeforeBuy = Stock.getStock(server, item);
-        int freshQuoteHash = QuoteHash.of(itemId, stockBeforeBuy, Stock.getEpoch(server));
-        TradeService.BuyOutcome freshOutcome = TradeService.buy(buyer, itemId, 2, freshQuoteHash);
+        long stockBeforeBuy = Stock.getStock(server, TEST_SCOPE, item);
+        int freshQuoteHash = QuoteHash.of(itemId, stockBeforeBuy, Stock.getEpoch(server, TEST_SCOPE));
+        TradeService.BuyOutcome freshOutcome = TradeService.buy(buyer, itemId, 2, freshQuoteHash, TEST_SCOPE);
 
         helper.assertTrue(freshOutcome.success(), "a fresh quote taken after the interleaving sell should succeed");
-        helper.assertTrue(Stock.getStock(server, item) == stockBeforeBuy - 2, "final stock should reflect exactly the net of both sells and the one successful buy");
+        helper.assertTrue(Stock.getStock(server, TEST_SCOPE, item) == stockBeforeBuy - 2, "final stock should reflect exactly the net of both sells and the one successful buy");
         helper.succeed();
     }
 
     private static ServerPlayer testPlayer(GameTestHelper helper, String name) {
-        // A random UUID each call, even for a repeated name, since FakePlayerFactory caches by (level, profile)
-        // and a stale cached player from an earlier run could leak state (inventory, etc.) into this test.
         return FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), name));
     }
 

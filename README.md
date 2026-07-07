@@ -8,7 +8,7 @@ Every item has a value that rises and falls with how much of it the server has t
 
 ## How it works
 
-Sell an item at the **Trade Hub** and it goes into the server's shared stock. The more of an item that's already in stock, the less each additional unit is worth — a logarithmic curve, so payouts taper off smoothly instead of cratering to zero or staying flat forever. Buying an item pulls it back out of stock and pushes the price for the *next* buyer back up. Selling something and immediately buying it back always costs you more than you got paid, so there's no free-money loop to exploit.
+Sell an item at the **Trade Hub** and it goes into that hub's stock — either its own **local market** (isolated to that position) or a named **network** shared across hubs connected to the same **Network Connector** name. The more of an item that's already in stock, the less each additional unit is worth — a logarithmic curve, so payouts taper off smoothly instead of cratering to zero or staying flat forever. Buying an item pulls it back out of stock and pushes the price for the *next* buyer back up. Selling something and immediately buying it back always costs you more than you got paid, so there's no free-money loop to exploit.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ Sell an item at the **Trade Hub** and it goes into the server's shared stock. Th
 - NeoForge 26.2.0.7-beta or later
 - Java 25 (bundled with modern NeoForge installers — you generally don't need to install this yourself)
 
-This is a **server-side economy**: balances and stock are stored per-world/per-server, so all players on a given server share the same market. It needs to be installed on the server; players also need it installed client-side to see the Trade Hub screen.
+This is a **server-side economy**: balances and stock are stored per-world/per-server. Trade Hubs operate as local markets or can be linked into named networks via Network Connectors, sharing stock with all hubs on the same network name. It needs to be installed on the server; players also need it installed client-side to see the Trade Hub and Network Connector screens.
 
 ## Installation
 
@@ -27,9 +27,10 @@ This is a **server-side economy**: balances and stock are stored per-world/per-s
 ## Getting started
 
 1. **Craft a Trade Hub.** It's a hollow ring of 8 sticks in a 3x3 crafting grid (sticks on all edges and corners, empty in the middle) — yields one Trade Hub block.
-2. **Place it** and right-click to open the trading screen.
-3. **Sell** something: drag an eligible item stack into the Sell Slot on the left. It sells instantly — no confirmation step, no waiting.
-4. **Buy** something: search or browse the catalog on the right side of the screen, click an item, pick a quantity, and hit Confirm.
+2. **Place it** and right-click to open the trading screen. By itself, a Trade Hub is a **local market** with its own isolated stock.
+3. **(Optional) Connect it to a network.** Craft a **Network Connector** (stick above redstone in a vertical line) and place it next to the Trade Hub. Right-click it to set a network name — all hubs connected to the same network name share stock.
+4. **Sell** something: drag an eligible item stack into the Sell Slot on the left. It sells instantly — no confirmation step, no waiting.
+5. **Buy** something: search or browse the catalog on the right side of the screen, click an item, pick a quantity, and hit Confirm.
 
 Only plain, unmodified item stacks can be sold — no enchanted gear, no renamed items, nothing with custom NBT/components. That's intentional: it keeps every unit of a given item identical in value, and stops players from using rare modifications to dodge the pricing curve.
 

@@ -18,19 +18,15 @@ import net.minecraft.world.item.ItemStack;
 import sh.leaflab.goods.Config;
 import sh.leaflab.goods.network.CatalogEntry;
 
-// The single entry point for both trade directions — reused by the Sell Slot GUI (Milestone 5) and the catalog
-// buy packet handler (Milestone 6), so the eligibility/value/persistence logic is written once, not per surface.
+// The single entry point for both trade directions — reused by the Sell Slot GUI and the catalog
+// buy packet handler, so the eligibility/value/persistence logic is written once, not per surface.
+// All operations require a stock scope string (see StockData) that identifies which stock pool to
+// read/write — determined by TradeHubMenu based on whether an adjacent Network Connector exists.
 public final class TradeService {
     private TradeService() {
     }
 
-    /**
-     * Sells the whole of {@code stack} (does not mutate it — the caller is responsible for removing the item from
-     * wherever it came from on success).
-     *
-     * @return true if the sale went through
-     */
-    public static boolean sell(ServerPlayer player, ItemStack stack) {
+    public static boolean sell(ServerPlayer player, ItemStack stack, String scope) {
         if (!ItemEligibility.isEligible(stack)) {
             player.sendSystemMessage(Component.translatable("block.thegoods.trade_hub.not_eligible"));
             return false;
@@ -40,11 +36,11 @@ public final class TradeService {
         Item item = stack.getItem();
         long quantity = stack.getCount();
 
-        long stockBefore = Stock.getStock(server, item);
+        long stockBefore = Stock.getStock(server, scope, item);
         long payout = Currency.sellValue(stockBefore, quantity);
 
         Economy.give(server, player.getUUID(), payout);
-        Stock.credit(server, item, quantity);
+        Stock.credit(server, scope, item, quantity);
 
         player.sendSystemMessage(Component.translatable(
                 "block.thegoods.trade_hub.sold", quantity, stack.getHoverName(), Currency.format(payout)));
@@ -55,7 +51,7 @@ public final class TradeService {
     // stock must still be purchasable down to 0, only new deposits (selling) are blocked. Stock > 0 is the only
     // real precondition; a default-component check isn't needed either since every stack that ever entered stock
     // was already validated as default-component at sell time.
-    public static BuyOutcome buy(ServerPlayer player, Identifier itemId, long quantity, int quoteHash) {
+    public static BuyOutcome buy(ServerPlayer player, Identifier itemId, long quantity, int quoteHash, String scope) {
         if (quantity <= 0 || quantity > Integer.MAX_VALUE) {
             return fail(player, "commands.thegoods.buy.invalid_quantity");
         }
@@ -65,19 +61,17 @@ public final class TradeService {
         }
 
         MinecraftServer server = player.level().getServer();
-        long stockBefore = Stock.getStock(server, item);
+        long stockBefore = Stock.getStock(server, scope, item);
         if (quantity > stockBefore) {
             return fail(player, "commands.thegoods.buy.insufficient_stock");
         }
 
-        long epoch = Stock.getEpoch(server);
+        long epoch = Stock.getEpoch(server, scope);
         if (QuoteHash.of(itemId, stockBefore, epoch) != quoteHash) {
             return fail(player, "commands.thegoods.buy.stale_quote");
         }
 
         int feePercent = Config.TRANSACTION_FEE_PERCENT.get();
-        // buyRawCost (the expensive StrictMath.log1p call) computed once and reused for both the fee-adjusted
-        // charge and the fee-free baseline below — buyCostWithFee/buyCost would each redo it independently.
         double rawCost = Currency.buyRawCost(stockBefore, quantity);
         long cost = Currency.ceilToFixedPoint(rawCost * (1.0 + feePercent / 100.0));
         if (Economy.getBalance(server, player.getUUID()) < cost) {
@@ -88,17 +82,13 @@ public final class TradeService {
             return fail(player, "commands.thegoods.buy.inventory_full");
         }
 
-        // The fee portion is the difference between what was actually charged and what a 0%-fee purchase of the
-        // same quantity at the same stock level would have cost — both ceil-rounded independently from the same
-        // raw value, but that's fine here since this is a lifetime reporting counter (/goods metrics), not itself
-        // a transacted amount.
         long feeCollected = cost - Currency.ceilToFixedPoint(rawCost);
 
         Economy.take(server, player.getUUID(), cost);
         if (feeCollected > 0) {
             Economy.addLifetimeFees(server, feeCollected);
         }
-        Stock.debit(server, item, quantity);
+        Stock.debit(server, scope, item, quantity);
 
         long remaining = quantity;
         int maxStackSize = new ItemStack(item).getMaxStackSize();
@@ -118,13 +108,9 @@ public final class TradeService {
         return BuyOutcome.failure(messageKey);
     }
 
-    // Returns the full filtered+sorted result set rather than a page — the client holds it and scrolls locally
-    // (see CatalogWidget), matching Refined Storage's client-side grid scrolling instead of requesting a new page
-    // per scroll tick. Re-sent whenever search/sort changes or the stock epoch advances (TradeHubMenu), not per
-    // frame, so this isn't on any hot path.
-    public static List<CatalogEntry> queryCatalog(MinecraftServer server, String search, String sortKey, boolean ascending) {
-        Map<Item, Long> stock = Stock.positiveStock(server);
-        long epoch = Stock.getEpoch(server);
+    public static List<CatalogEntry> queryCatalog(MinecraftServer server, String search, String sortKey, boolean ascending, String scope) {
+        Map<Item, Long> stock = Stock.positiveStock(server, scope);
+        long epoch = Stock.getEpoch(server, scope);
         String needle = search.toLowerCase(Locale.ROOT);
 
         List<Map.Entry<Item, Long>> filtered = new ArrayList<>();
@@ -153,9 +139,6 @@ public final class TradeService {
         return item.getDefaultInstance().getHoverName().getString();
     }
 
-    // Conservative and read-only: only counts guaranteed-empty slots and existing same-item default-component
-    // stacks with room, never mutates anything. May slightly underestimate room in edge cases, but never
-    // overestimates, so it can never lead to a partial give after currency has already been charged.
     private static boolean hasInventoryRoom(Inventory inventory, Item item, long quantity) {
         long remaining = quantity;
         int maxStackSize = new ItemStack(item).getMaxStackSize();
