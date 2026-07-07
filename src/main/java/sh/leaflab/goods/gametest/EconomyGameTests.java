@@ -27,6 +27,8 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 import sh.leaflab.goods.Config;
 import sh.leaflab.goods.TheGoods;
+import sh.leaflab.goods.economy.Audit;
+import sh.leaflab.goods.economy.AuditEntry;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
 import sh.leaflab.goods.economy.QuoteHash;
@@ -77,6 +79,8 @@ public final class EconomyGameTests {
             register("give_take_reset_mutate_balances_correctly", EconomyGameTests::giveTakeResetMutateBalancesCorrectly);
     private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT =
             register("sell_interleaved_with_buy_keeps_stock_consistent", EconomyGameTests::sellInterleavedWithBuyKeepsStockConsistent);
+    private static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> AUDIT_LOG_RECORDS_ALL_TRANSACTION_TYPES =
+            register("audit_log_records_all_transaction_types", EconomyGameTests::auditLogRecordsAllTransactionTypes);
 
     private static DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> register(String name, Consumer<GameTestHelper> test) {
         return TEST_FUNCTIONS.register(name, () -> test);
@@ -90,7 +94,7 @@ public final class EconomyGameTests {
                 BUY_REJECTED_ON_INSUFFICIENT_BALANCE, BUYING_LAST_UNIT_IS_ATOMIC, FORGED_QUOTE_HASH_REJECTED,
                 INVALID_QUANTITY_REJECTED_BEFORE_PRICING, CATALOG_EXCLUDES_ZERO_STOCK_AND_SORTS, BUY_COST_HONORS_FEE_BOUNDARIES,
                 REQUEST_ACCEPT_REVALIDATES_BALANCE, METRICS_DATA_AGGREGATES_CORRECTLY, GIVE_TAKE_RESET_MUTATE_BALANCES_CORRECTLY,
-                SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT)) {
+                SELL_INTERLEAVED_WITH_BUY_KEEPS_STOCK_CONSISTENT, AUDIT_LOG_RECORDS_ALL_TRANSACTION_TYPES)) {
             event.registerTest(test.getId(), new FunctionGameTestInstance(
                     test.getKey(), new TestData<>(environment, emptyStructure, MAX_TICKS, 0, true)));
         }
@@ -424,6 +428,81 @@ public final class EconomyGameTests {
 
         helper.assertTrue(freshOutcome.success(), "a fresh quote taken after the interleaving sell should succeed");
         helper.assertTrue(Stock.getStock(server, item) == stockBeforeBuy - 2, "final stock should reflect exactly the net of both sells and the one successful buy");
+        helper.succeed();
+    }
+
+    private static void auditLogRecordsAllTransactionTypes(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = testPlayer(helper, "audit-player");
+        ServerPlayer counterparty = testPlayer(helper, "audit-counterparty");
+        Item item = Items.BLAZE_POWDER;
+        Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
+        boolean originalEnabled = Config.AUDIT_LOG_ENABLED.get();
+
+        try {
+            Config.AUDIT_LOG_ENABLED.set(true);
+            int before = Audit.size(server);
+
+            // Test give
+            Economy.give(server, player.getUUID(), Currency.parseExact("1000"));
+            Audit.log(server, "GIVE", player.getUUID(), "admin", player.getUUID(), player.getGameProfile().name(),
+                    Currency.parseExact("1000"), Economy.getBalance(server, player.getUUID()), null, 0);
+            helper.assertTrue(Audit.size(server) == before + 1, "audit should record give");
+            helper.assertTrue(Audit.latest(server, 1).getFirst().action().equals("GIVE"),
+                    "audit entry action should be GIVE, got " + Audit.latest(server, 1).getFirst().action());
+
+            // Test take
+            Economy.take(server, player.getUUID(), Currency.parseExact("100"));
+            Audit.log(server, "TAKE", player.getUUID(), "admin", player.getUUID(), player.getGameProfile().name(),
+                    Currency.parseExact("100"), Economy.getBalance(server, player.getUUID()), null, 0);
+            helper.assertTrue(Audit.size(server) == before + 2, "audit should record take");
+            helper.assertTrue(Audit.latest(server, 1).getFirst().action().equals("TAKE"),
+                    "audit entry action should be TAKE, got " + Audit.latest(server, 1).getFirst().action());
+
+            // Test reset
+            Economy.reset(server, player.getUUID());
+            Audit.log(server, "RESET", player.getUUID(), "admin", player.getUUID(), player.getGameProfile().name(),
+                    0, 0, null, 0);
+            helper.assertTrue(Audit.size(server) == before + 3, "audit should record reset");
+            helper.assertTrue(Audit.latest(server, 1).getFirst().action().equals("RESET"),
+                    "audit entry action should be RESET, got " + Audit.latest(server, 1).getFirst().action());
+
+            // Test pay
+            Economy.give(server, player.getUUID(), Currency.parseExact("500"));
+            Economy.give(server, counterparty.getUUID(), Currency.parseExact("300"));
+            Economy.transfer(server, counterparty.getUUID(), player.getUUID(), Currency.parseExact("50"));
+            Audit.log(server, "PAY", counterparty.getUUID(), counterparty.getGameProfile().name(),
+                    player.getUUID(), player.getGameProfile().name(),
+                    Currency.parseExact("50"), Economy.getBalance(server, player.getUUID()), null, 0);
+            helper.assertTrue(Audit.size(server) == before + 4, "audit should record pay");
+            AuditEntry payEntry = Audit.latest(server, 1).getFirst();
+            helper.assertTrue(payEntry.action().equals("PAY"),
+                    "audit entry action should be PAY, got " + payEntry.action());
+
+            // Test sell (TradeService.sell calls Audit.log internally)
+            TradeService.sell(player, new ItemStack(item, 10));
+            helper.assertTrue(Audit.size(server) == before + 5, "audit should record sell");
+            AuditEntry sellEntry = Audit.latest(server, 1).getFirst();
+            helper.assertTrue(sellEntry.action().equals("SELL"),
+                    "audit entry action should be SELL, got " + sellEntry.action());
+            helper.assertTrue(sellEntry.itemId().equals(itemId.toString()),
+                    "audit sell entry should have the item id, got " + sellEntry.itemId());
+
+            // Test buy (TradeService.buy calls Audit.log internally)
+            Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
+            long stock = Stock.getStock(server, item);
+            int quoteHash = QuoteHash.of(itemId, stock, Stock.getEpoch(server));
+            TradeService.BuyOutcome buyOutcome = TradeService.buy(player, itemId, 1, quoteHash);
+            helper.assertTrue(buyOutcome.success(), "buy should succeed");
+            AuditEntry buyEntry = Audit.latest(server, 1).getFirst();
+            helper.assertTrue(buyEntry.action().equals("BUY"),
+                    "audit entry action should be BUY, got " + buyEntry.action());
+            helper.assertTrue(buyEntry.itemId().equals(itemId.toString()),
+                    "audit buy entry should have the item id, got " + buyEntry.itemId());
+        } finally {
+            Config.AUDIT_LOG_ENABLED.set(originalEnabled);
+        }
+
         helper.succeed();
     }
 

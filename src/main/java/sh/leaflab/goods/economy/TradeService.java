@@ -46,6 +46,11 @@ public final class TradeService {
         Economy.give(server, player.getUUID(), payout);
         Stock.credit(server, item, quantity);
 
+        Audit.log(server, "SELL", player.getUUID(), player.getGameProfile().name(),
+                player.getUUID(), player.getGameProfile().name(),
+                payout, Economy.getBalance(server, player.getUUID()),
+                BuiltInRegistries.ITEM.getKey(item).toString(), quantity);
+
         player.sendSystemMessage(Component.translatable(
                 "block.thegoods.trade_hub.sold", quantity, stack.getHoverName(), Currency.format(payout)));
         return true;
@@ -99,6 +104,11 @@ public final class TradeService {
             Economy.addLifetimeFees(server, feeCollected);
         }
         Stock.debit(server, item, quantity);
+
+        Audit.log(server, "BUY", player.getUUID(), player.getGameProfile().name(),
+                player.getUUID(), player.getGameProfile().name(),
+                cost, Economy.getBalance(server, player.getUUID()),
+                itemId.toString(), quantity);
 
         long remaining = quantity;
         int maxStackSize = new ItemStack(item).getMaxStackSize();

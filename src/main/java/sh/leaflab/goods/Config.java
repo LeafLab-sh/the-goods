@@ -27,6 +27,14 @@ public class Config {
             .comment("If non-empty, only these items can be traded and itemDenyList is ignored. Empty by default.")
             .defineListAllowEmpty("itemAllowList", List.of(), () -> "", Config::validateItemName);
 
+    public static final ModConfigSpec.BooleanValue AUDIT_LOG_ENABLED = BUILDER
+            .comment("Enable audit logging of all currency transfers and admin actions.")
+            .define("auditLog.enabled", true);
+
+    public static final ModConfigSpec.IntValue AUDIT_LOG_MAX_ENTRIES = BUILDER
+            .comment("Maximum number of audit log entries to retain (0 = unlimited).")
+            .defineInRange("auditLog.maxEntries", 100, 0, 10000);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     // Still fails hard on an invalid entry (crashes config loading) rather than silently correcting it away, but

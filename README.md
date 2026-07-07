@@ -52,6 +52,7 @@ Only plain, unmodified item stacks can be sold — no enchanted gear, no renamed
 | `/goods give <player> <amount>` | op | Add to a player's balance, notifies them if online |
 | `/goods take <player> <amount>` | op | Subtract from a player's balance (floors at 0), notifies them if online |
 | `/goods reset <player>` | op | Zero out a player's balance, notifies them if online |
+| `/goods audit [count]` | gamemaster | View recent audit log entries (default 10, max 100) — all GIVE/TAKE/RESET/PAY/REQUEST_ACCEPT/SELL/BUY actions with timestamps and actors |
 | `/goods metrics` | gamemaster | Server-wide economy stats: item types in stock, total stock value, currency in circulation, top/bottom valued items |
 
 `give`/`take`/`pay`/`request` all work with offline players by name, not just players currently online.
@@ -66,6 +67,8 @@ After the first launch, edit `config/thegoods-common.toml` (or use the in-game *
 | `transactionFeePercent` | `0` | Percentage fee charged on **buys only** (0–100); sells are never taxed |
 | `itemDenyList` | *(empty)* | Item IDs (e.g. `minecraft:diamond`) excluded from trading. Ignored if `itemAllowList` is non-empty. Denylisting an item that already has stock still lets that stock be bought down to 0 — it only blocks *new* deposits from that point on |
 | `itemAllowList` | *(empty)* | If non-empty, **only** these item IDs can be traded, and `itemDenyList` is ignored |
+| `auditLog.enabled` | `true` | Enable the transaction audit log |
+| `auditLog.maxEntries` | `100` | Maximum entries to retain (0 = unlimited) |
 
 An invalid entry in either list (not a real item ID, or not a registered item) will fail config loading with a specific error in the log rather than silently being dropped — check your server log if the config doesn't seem to be taking effect.
 
