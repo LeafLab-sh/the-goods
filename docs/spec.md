@@ -7,10 +7,18 @@ Narratively, players are trading with an off-world spaceship (or another dimensi
 
 ## Blocks
 
-- **Trade Hub** block placed in world. Interacting with any side opens the trade interface. First version: direct
-  player interaction only, no automated/hopper-fed deposit (see Future Ideas).
-- **Obtainable via crafting**, appears in a creative mode tab. **Temporary recipe** (placeholder, not balanced): a
-  hollow 3×3 box of sticks (8 border slots filled, center empty) yields 1 Trade Hub.
+- **Trade Hub** block placed in world. Interacting with any side opens the trade interface. Direct
+  player interaction (drag item into Sell Slot) or automated deposit via an adjacent **Depositor** block.
+- **Depositor** — a logistics block placed adjacent to a Trade Hub. Accepts item input from any of its 5
+  non-facing sides (hopper, dropper, item pipe). On a configurable cooldown (default 8 ticks), it processes
+  one item type from its internal buffer: eligible items are auto-sold into the economy and the currency
+  credited to the block placer's account. Ineligible items (non-stackable, default-component violations,
+  deny-listed) are left in the buffer and keep it from filling further. The block has a 1-slot GUI for
+  manual inspection and outputs a comparator signal based on buffer fullness. The recipe is a chest
+  surrounded by iron ingots in a U shape (like a hopper without the center).
+- **Obtainable via crafting**, appear in the creative mode tab. **Temporary recipes** (placeholder, not balanced):
+  - Trade Hub: a hollow 3×3 box of sticks (8 border slots filled, center empty) yields 1 Trade Hub.
+  - Depositor: iron ingots in a U shape with a chest in the center yields 1 Depositor.
 
 ## Slash Commands
 
@@ -152,10 +160,7 @@ Abbreviation always **floors**, so a display never overstates spendable value.
 These are explicitly out of scope for the initial implementation but worth revisiting later:
 
 - **Per-hub stock and currencies**: instead of one global stock, let individual Trade Hubs maintain independent stock, optionally with their own currency or a configured exchange rate against the server currency. Would open the door to a banking/exchange-rate system between hubs.
-- **Depositor block** (automated deposits): a block that attaches to the Trade Hub and enables automatic transfer of items into the system via hopper/item pipe, crediting currency to the placer's account as items are transferred. Design notes for when it's picked up:
-  - Items rejected by `ItemAllowList`/`ItemDenyList` (or that aren't stackable) are **not** consumed — a rejected item fills whatever input slot the inserter tried to place it in, and that slot stays blocked while other slots keep accepting deposits normally. Only once every slot is blocked does the Depositor stop accepting deposits, matching how a vanilla hopper refuses to push into a full inventory.
-  - When fully blocked, the Depositor should output a redstone signal the same way a vanilla hopper/container reads as "full" to a comparator.
-  - Crediting currently goes entirely to whoever placed the block, which is unrefined for shared/communal infrastructure. Consider integrating with claim-based mods (or a similar in-mod ownership concept) so credit/access can be shared or restricted based on claim ownership.
+- **Shared/communal Depositor ownership**: the Depositor currently credits the block placer's account exclusively. Consider claim-based mod integration (or in-mod ownership groups) so credit/access can be shared or restricted.
 - **Configurable value-curve tuning**: the `log2` base is currently fixed. A configurable curve base/scale would let admins tune how quickly the economy "matures" on high-throughput servers.
 - **Admin-seeded initial stock**: a command/config to seed starting stock for select items, for servers that don't want a cold-start economy.
 - **Tag-based allow/deny lists**: letting admins deny e.g. `#minecraft:tools` instead of listing every item individually.
