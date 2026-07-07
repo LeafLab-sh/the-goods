@@ -74,8 +74,15 @@
   "thegoods.configuration.title": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml": "The Goods Configs",
   "thegoods.configuration.section.thegoods.common.toml.title": "The Goods Configs",
+  "thegoods.configuration.auditLog.enabled": "Audit Log Enabled",
+  "thegoods.configuration.auditLog.maxEntries": "Audit Log Max Entries",
   "thegoods.configuration.currencyName": "Currency Name",
   "thegoods.configuration.transactionFeePercent": "Transaction Fee Percent",
   "thegoods.configuration.itemDenyList": "Item Deny List",
-  "thegoods.configuration.itemAllowList": "Item Allow List"
+  "thegoods.configuration.itemAllowList": "Item Allow List",
+
+  "commands.thegoods.audit.header": "=== The Goods: Audit Log ===",
+  "commands.thegoods.audit.entry": "#%s (t=%s) [%s] %s \u2192 %s: %s (balance: %s)%s",
+  "commands.thegoods.audit.disabled": "Audit logging is disabled",
+  "commands.thegoods.audit.empty": "No audit log entries"
 }

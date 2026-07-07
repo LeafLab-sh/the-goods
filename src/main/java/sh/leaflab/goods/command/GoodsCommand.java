@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -28,6 +29,8 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import sh.leaflab.goods.Config;
+import sh.leaflab.goods.economy.Audit;
+import sh.leaflab.goods.economy.AuditEntry;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
 import sh.leaflab.goods.economy.Stock;
@@ -89,7 +92,12 @@ public final class GoodsCommand {
                                 .executes(GoodsCommand::reset)))
                 .then(Commands.literal("metrics")
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
-                        .executes(GoodsCommand::metrics)));
+                        .executes(GoodsCommand::metrics))
+                .then(Commands.literal("audit")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .executes(ctx -> audit(ctx, 10))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, 100))
+                                .executes(ctx -> audit(ctx, IntegerArgumentType.getInteger(ctx, "count"))))));
     }
 
     // StringArgumentType (not EntityArgument.player()) is used for player names so offline players can be
@@ -111,8 +119,10 @@ public final class GoodsCommand {
         long amount = parseAmount(ctx, "amount");
         NameAndId target = resolvePlayer(ctx, "player");
         MinecraftServer server = ctx.getSource().getServer();
+        Actor actor = getActor(ctx.getSource());
         Economy.give(server, target.id(), amount);
         long newBalance = Economy.getBalance(server, target.id());
+        Audit.log(server, "GIVE", actor.id(), actor.name(), target.id(), target.name(), amount, newBalance, null, 0);
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.give", Currency.format(amount), target.name(), Currency.format(newBalance)), true);
         notifyIfOnline(server, target.id(), () -> Component.translatable(
@@ -124,8 +134,10 @@ public final class GoodsCommand {
         long amount = parseAmount(ctx, "amount");
         NameAndId target = resolvePlayer(ctx, "player");
         MinecraftServer server = ctx.getSource().getServer();
+        Actor actor = getActor(ctx.getSource());
         Economy.take(server, target.id(), amount);
         long newBalance = Economy.getBalance(server, target.id());
+        Audit.log(server, "TAKE", actor.id(), actor.name(), target.id(), target.name(), amount, newBalance, null, 0);
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.take", Currency.format(amount), target.name(), Currency.format(newBalance)), true);
         notifyIfOnline(server, target.id(), () -> Component.translatable(
@@ -136,7 +148,9 @@ public final class GoodsCommand {
     private static int reset(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         NameAndId target = resolvePlayer(ctx, "player");
         MinecraftServer server = ctx.getSource().getServer();
+        Actor actor = getActor(ctx.getSource());
         Economy.reset(server, target.id());
+        Audit.log(server, "RESET", actor.id(), actor.name(), target.id(), target.name(), 0, 0, null, 0);
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.reset", target.name()), true);
         notifyIfOnline(server, target.id(), () -> Component.translatable("commands.thegoods.reset.notify"));
         return 1;
@@ -211,6 +225,8 @@ public final class GoodsCommand {
             throw INSUFFICIENT_BALANCE.create();
         }
         Economy.transfer(server, sender.getUUID(), target.id(), amount);
+        Audit.log(server, "PAY", sender.getUUID(), sender.getGameProfile().name(),
+                target.id(), target.name(), amount, Economy.getBalance(server, target.id()), null, 0);
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.pay", Currency.format(amount), target.name()), true);
         notifyIfOnline(server, target.id(), () -> Component.translatable(
@@ -248,6 +264,8 @@ public final class GoodsCommand {
             throw INSUFFICIENT_BALANCE.create();
         }
 
+        Audit.log(server, "REQUEST_ACCEPT", payer.getUUID(), payer.getGameProfile().name(),
+                requester.id(), requester.name(), pending.amount(), Economy.getBalance(server, requester.id()), null, 0);
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.request.accepted", Currency.format(pending.amount()), requester.name()), true);
         notifyIfOnline(server, requester.id(), () -> Component.translatable(
@@ -331,6 +349,42 @@ public final class GoodsCommand {
                 .withStyle(style -> style
                         .withClickEvent(new ClickEvent.RunCommand("/goods request cancel " + counterpartName))
                         .withColor(ChatFormatting.RED));
+    }
+
+    private static int audit(CommandContext<CommandSourceStack> ctx, int count) {
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!Config.AUDIT_LOG_ENABLED.get()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.audit.disabled"), false);
+            return 0;
+        }
+        List<AuditEntry> entries = Audit.latest(server, count);
+        if (entries.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.audit.empty"), false);
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.audit.header"), false);
+        for (int i = 0; i < entries.size(); i++) {
+            AuditEntry entry = entries.get(i);
+            String detail = switch (entry.action()) {
+                case "SELL", "BUY" -> entry.itemId() + " x" + entry.itemQuantity();
+                default -> "";
+            };
+            Component line = Component.translatable("commands.thegoods.audit.entry",
+                    i + 1, entry.gameTime(), entry.action(), entry.actorName(), entry.targetName(),
+                    Currency.format(entry.amount()), Currency.format(entry.targetBalance()), detail);
+            ctx.getSource().sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
+    private static record Actor(UUID id, String name) {
+    }
+
+    private static Actor getActor(CommandSourceStack source) {
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return new Actor(player.getUUID(), player.getGameProfile().name());
+        }
+        return new Actor(new UUID(0L, 0L), source.getTextName());
     }
 
     private static long parseAmount(CommandContext<CommandSourceStack> ctx, String argName) throws CommandSyntaxException {
