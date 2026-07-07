@@ -27,11 +27,11 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 import sh.leaflab.goods.Config;
 import sh.leaflab.goods.TheGoods;
+import sh.leaflab.goods.api.TradeRequest;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
 import sh.leaflab.goods.economy.QuoteHash;
 import sh.leaflab.goods.economy.Stock;
-import sh.leaflab.goods.economy.TradeRequest;
 import sh.leaflab.goods.economy.TradeService;
 import sh.leaflab.goods.menu.TradeHubMenu;
 import sh.leaflab.goods.network.CatalogEntry;
@@ -161,7 +161,7 @@ public final class EconomyGameTests {
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
         TradeService.sell(player, new ItemStack(item, 10));
-        Economy.reset(server, player.getUUID());
+        Economy.reset(server, player.getUUID(), player.getUUID());
         long stock = Stock.getStock(server, item);
         int quoteHash = QuoteHash.of(itemId, stock, Stock.getEpoch(server));
 
@@ -189,8 +189,8 @@ public final class EconomyGameTests {
         ServerPlayer buyerA = testPlayer(helper, "atomic-buyer-a");
         ServerPlayer buyerB = testPlayer(helper, "atomic-buyer-b");
         long plenty = Currency.parseExact("1000000");
-        Economy.give(server, buyerA.getUUID(), plenty);
-        Economy.give(server, buyerB.getUUID(), plenty);
+        Economy.give(server, buyerA.getUUID(), buyerA.getUUID(), plenty);
+        Economy.give(server, buyerB.getUUID(), buyerB.getUUID(), plenty);
 
         TradeService.BuyOutcome outcomeA = TradeService.buy(buyerA, itemId, stock, quoteHash);
         TradeService.BuyOutcome outcomeB = TradeService.buy(buyerB, itemId, stock, quoteHash);
@@ -208,7 +208,7 @@ public final class EconomyGameTests {
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
         TradeService.sell(player, new ItemStack(item, 5));
-        Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
+        Economy.give(server, player.getUUID(), player.getUUID(), Currency.parseExact("1000000"));
         long stock = Stock.getStock(server, item);
 
         // Never equal to a hash this server actually computed and sent to a client.
@@ -227,7 +227,7 @@ public final class EconomyGameTests {
         Identifier itemId = BuiltInRegistries.ITEM.getKey(item);
 
         TradeService.sell(player, new ItemStack(item, 5));
-        Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
+        Economy.give(server, player.getUUID(), player.getUUID(), Currency.parseExact("1000000"));
         long balanceBefore = Economy.getBalance(server, player.getUUID());
         long stockBefore = Stock.getStock(server, item);
 
@@ -277,7 +277,7 @@ public final class EconomyGameTests {
         int originalFeePercent = Config.TRANSACTION_FEE_PERCENT.get();
 
         TradeService.sell(player, new ItemStack(item, 10));
-        Economy.give(server, player.getUUID(), Currency.parseExact("1000000"));
+        Economy.give(server, player.getUUID(), player.getUUID(), Currency.parseExact("1000000"));
 
         try {
             Config.TRANSACTION_FEE_PERCENT.set(0);
@@ -316,11 +316,11 @@ public final class EconomyGameTests {
         ServerPlayer payer = testPlayer(helper, "request-accept-payer");
         long requestAmount = Currency.parseExact("100");
 
-        Economy.give(server, payer.getUUID(), requestAmount);
+        Economy.give(server, payer.getUUID(), payer.getUUID(), requestAmount);
         Economy.putRequest(server, new TradeRequest(requester.getUUID(), payer.getUUID(), requestAmount));
 
         // Balance drops below the pending request's amount after the request was made but before it's accepted.
-        Economy.take(server, payer.getUUID(), Currency.parseExact("50"));
+        Economy.take(server, payer.getUUID(), payer.getUUID(), Currency.parseExact("50"));
 
         TradeRequest pending = Economy.findRequest(server, requester.getUUID(), payer.getUUID()).orElse(null);
         helper.assertTrue(pending != null, "the pending request should still be found at resolution time");
@@ -331,7 +331,7 @@ public final class EconomyGameTests {
                 "an insufficient-balance accept must leave the request pending, not silently consume it");
 
         // Top the payer back up past the amount and confirm the real guard now succeeds and transfers correctly.
-        Economy.give(server, payer.getUUID(), Currency.parseExact("50"));
+        Economy.give(server, payer.getUUID(), payer.getUUID(), Currency.parseExact("50"));
         long payerBalanceBefore = Economy.getBalance(server, payer.getUUID());
         long requesterBalanceBefore = Economy.getBalance(server, requester.getUUID());
 
@@ -356,7 +356,7 @@ public final class EconomyGameTests {
 
         TradeService.sell(seller, new ItemStack(scarce, 1));
         TradeService.sell(seller, new ItemStack(plentiful, 50));
-        Economy.give(server, seller.getUUID(), Currency.parseExact("1000"));
+        Economy.give(server, seller.getUUID(), seller.getUUID(), Currency.parseExact("1000"));
 
         Map<Item, Long> stock = Stock.positiveStock(server);
         helper.assertTrue(stock.containsKey(scarce) && stock.containsKey(plentiful), "both traded items should appear in positive stock");
@@ -382,17 +382,17 @@ public final class EconomyGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "admin-balance-ops");
 
-        Economy.give(server, player.getUUID(), Currency.parseExact("100"));
+        Economy.give(server, player.getUUID(), player.getUUID(), Currency.parseExact("100"));
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == Currency.parseExact("100"), "give should credit exactly the given amount to a zero balance");
 
-        Economy.take(server, player.getUUID(), Currency.parseExact("30"));
+        Economy.take(server, player.getUUID(), player.getUUID(), Currency.parseExact("30"));
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == Currency.parseExact("70"), "take should debit exactly the taken amount");
 
-        Economy.take(server, player.getUUID(), Currency.parseExact("1000"));
+        Economy.take(server, player.getUUID(), player.getUUID(), Currency.parseExact("1000"));
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "take should floor at 0 rather than going negative");
 
-        Economy.give(server, player.getUUID(), Currency.parseExact("50"));
-        Economy.reset(server, player.getUUID());
+        Economy.give(server, player.getUUID(), player.getUUID(), Currency.parseExact("50"));
+        Economy.reset(server, player.getUUID(), player.getUUID());
         helper.assertTrue(Economy.getBalance(server, player.getUUID()) == 0, "reset should zero the balance regardless of what it was before");
         helper.succeed();
     }
@@ -411,7 +411,7 @@ public final class EconomyGameTests {
         TradeService.sell(seller, new ItemStack(item, 5));
         long stockAfterFirstSell = Stock.getStock(server, item);
         int quoteHash = QuoteHash.of(itemId, stockAfterFirstSell, Stock.getEpoch(server));
-        Economy.give(server, buyer.getUUID(), Currency.parseExact("1000000"));
+        Economy.give(server, buyer.getUUID(), buyer.getUUID(), Currency.parseExact("1000000"));
 
         // Seller adds more stock after the buyer's quote was taken but before the buyer confirms.
         TradeService.sell(seller, new ItemStack(item, 3));

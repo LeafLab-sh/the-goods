@@ -69,6 +69,29 @@ After the first launch, edit `config/thegoods-common.toml` (or use the in-game *
 
 An invalid entry in either list (not a real item ID, or not a registered item) will fail config loading with a specific error in the log rather than silently being dropped — check your server log if the config doesn't seem to be taking effect.
 
+## Interoperability API
+
+Other mods can read and (with appropriate permission) manipulate the economy through a
+stable API and event bus. See [`docs/interop-api.md`](docs/interop-api.md) for the full
+reference.
+
+Add the API as a `compileOnly` dependency from your mod's `build.gradle`:
+
+```groovy
+repositories {
+    maven { url "https://maven.leaflab.sh/releases" }
+}
+dependencies {
+    compileOnly "sh.leaflab.goods:thegoods-neoforge-${minecraft_version}:${thegoods_version}:api"
+}
+```
+
+The JAR with the `api` classifier contains only the public interfaces and events; the
+implementation is inside the main mod JAR. Your mod is never required to load at runtime
+alongside The Goods — if the code path that calls the API is guarded by a
+`ModList.get().isLoaded("thegoods")` check, everything else compiles and runs fine
+without it.
+
 ## Building from source
 
 ```bash

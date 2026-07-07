@@ -162,5 +162,5 @@ These are explicitly out of scope for the initial implementation but worth revis
 - **Audit trail for `/goods give`/`/goods take`**: a log of who got given/taken what and by which admin, for accountability.
 - **Per-player metrics command**: an admin command (e.g. `/goods metrics [PlayerName]`) to inspect a specific
   player's balance/transaction history, rather than only server-wide aggregates.
-- **Interoperability API**: expose stock/balance queries (and possibly restricted mutation) to other mods —
-  e.g. claim mods gating Trade Hub placement, quest mods rewarding currency.
+- ~~**Interoperability API**~~ **Implemented** — `src/api/java` source set (`ITheGoodsAPI`,
+  events on `NeoForge.EVENT_BUS`). See [`docs/interop-api.md`](interop-api.md).

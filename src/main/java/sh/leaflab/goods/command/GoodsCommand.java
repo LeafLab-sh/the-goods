@@ -28,10 +28,10 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import sh.leaflab.goods.Config;
+import sh.leaflab.goods.api.TradeRequest;
 import sh.leaflab.goods.economy.Currency;
 import sh.leaflab.goods.economy.Economy;
 import sh.leaflab.goods.economy.Stock;
-import sh.leaflab.goods.economy.TradeRequest;
 
 public final class GoodsCommand {
     private static final DynamicCommandExceptionType INVALID_AMOUNT = new DynamicCommandExceptionType(
@@ -111,7 +111,8 @@ public final class GoodsCommand {
         long amount = parseAmount(ctx, "amount");
         NameAndId target = resolvePlayer(ctx, "player");
         MinecraftServer server = ctx.getSource().getServer();
-        Economy.give(server, target.id(), amount);
+        UUID actor = actorId(ctx);
+        Economy.give(server, actor, target.id(), amount);
         long newBalance = Economy.getBalance(server, target.id());
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.give", Currency.format(amount), target.name(), Currency.format(newBalance)), true);
@@ -124,7 +125,8 @@ public final class GoodsCommand {
         long amount = parseAmount(ctx, "amount");
         NameAndId target = resolvePlayer(ctx, "player");
         MinecraftServer server = ctx.getSource().getServer();
-        Economy.take(server, target.id(), amount);
+        UUID actor = actorId(ctx);
+        Economy.take(server, actor, target.id(), amount);
         long newBalance = Economy.getBalance(server, target.id());
         ctx.getSource().sendSuccess(() -> Component.translatable(
                 "commands.thegoods.take", Currency.format(amount), target.name(), Currency.format(newBalance)), true);
@@ -136,7 +138,8 @@ public final class GoodsCommand {
     private static int reset(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         NameAndId target = resolvePlayer(ctx, "player");
         MinecraftServer server = ctx.getSource().getServer();
-        Economy.reset(server, target.id());
+        UUID actor = actorId(ctx);
+        Economy.reset(server, actor, target.id());
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.thegoods.reset", target.name()), true);
         notifyIfOnline(server, target.id(), () -> Component.translatable("commands.thegoods.reset.notify"));
         return 1;
@@ -331,6 +334,14 @@ public final class GoodsCommand {
                 .withStyle(style -> style
                         .withClickEvent(new ClickEvent.RunCommand("/goods request cancel " + counterpartName))
                         .withColor(ChatFormatting.RED));
+    }
+
+    /** Returns the executing player's UUID, or a nil UUID for console/command blocks. */
+    private static UUID actorId(CommandContext<CommandSourceStack> ctx) {
+        if (ctx.getSource().getEntity() instanceof ServerPlayer player) {
+            return player.getUUID();
+        }
+        return new UUID(0L, 0L);
     }
 
     private static long parseAmount(CommandContext<CommandSourceStack> ctx, String argName) throws CommandSyntaxException {
