@@ -58,11 +58,11 @@ Narratively, players are trading with an off-world spaceship (or another dimensi
 - **CurrencyName** — server-wide currency name.
 - **TransactionFeePercent** — tax on purchases only (selling is never taxed). Bound to **0–100%** inclusive.
   Collected fees are tracked in `/goods metrics` then discarded — a pure currency sink, no redirect.
-- **ItemDenyList** — default mode; excludes specific items (e.g. elytra, totems, netherite gear) from an
-  otherwise-open economy. Empty by default. Denylisting (or de-allowlisting) an item that already has stock still
-  lets buyers drain it to 0, but blocks new deposits immediately.
+- **ItemDenyList** — default mode; excludes specific items or item tags (e.g. `minecraft:diamond`,
+  `#minecraft:wool`) from an otherwise-open economy. Empty by default. Denylisting (or de-allowlisting) an
+  item that already has stock still lets buyers drain it to 0, but blocks new deposits immediately.
 - **ItemAllowList** — if populated, becomes an exclusive whitelist and `ItemDenyList` is ignored. Empty by
-  default.
+  default. Entries can be plain item IDs (`minecraft:brick`) or tag references (`#minecraft:planks`).
 
 ## Menus
 
@@ -163,7 +163,6 @@ These are explicitly out of scope for the initial implementation but worth revis
 - **Shared/communal Depositor ownership**: the Depositor currently credits the block placer's account exclusively. Consider claim-based mod integration (or in-mod ownership groups) so credit/access can be shared or restricted.
 - **Configurable value-curve tuning**: the `log2` base is currently fixed. A configurable curve base/scale would let admins tune how quickly the economy "matures" on high-throughput servers.
 - **Admin-seeded initial stock**: a command/config to seed starting stock for select items, for servers that don't want a cold-start economy.
-- **Tag-based allow/deny lists**: letting admins deny e.g. `#minecraft:tools` instead of listing every item individually.
 - **Audit trail for `/goods give`/`/goods take`**: a log of who got given/taken what and by which admin, for accountability.
 - **Per-player metrics command**: an admin command (e.g. `/goods metrics [PlayerName]`) to inspect a specific
   player's balance/transaction history, rather than only server-wide aggregates.
