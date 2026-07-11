@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "thegoods:block/depositor",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "thegoods:block/depositor"
+    },
+    "facing=south": {
+      "model": "thegoods:block/depositor",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "thegoods:block/depositor",
+      "y": 270
+    }
+  }
+}

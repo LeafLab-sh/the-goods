@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "thegoods:block/depositor_front",
+    "side": "thegoods:block/depositor_side",
+    "top": "thegoods:block/depositor_top"
+  }
+}

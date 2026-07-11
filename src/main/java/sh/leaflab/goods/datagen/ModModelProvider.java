@@ -7,6 +7,7 @@ import net.minecraft.client.data.models.MultiVariant;
 import net.minecraft.client.data.models.blockstates.MultiVariantGenerator;
 import net.minecraft.client.data.models.blockstates.PropertyDispatch;
 import net.minecraft.client.data.models.model.ModelLocationUtils;
+import net.minecraft.client.data.models.model.TexturedModel;
 import net.minecraft.client.renderer.block.dispatch.Variant;
 import net.minecraft.core.Direction;
 import net.minecraft.data.PackOutput;
@@ -20,6 +21,10 @@ import sh.leaflab.goods.TheGoods;
 // The Trade Hub's model bakes literal per-face UV crops out of a single texture (a Blockbench cube UV-unwrap),
 // which BlockModelGenerators' parent+texture templates can't express — so the model itself is a static asset
 // under src/main/resources rather than generated here. Only the FACING blockstate rotation is generated.
+//
+// The Depositor uses vanilla's furnace-style orientable-cube template instead (TexturedModel.ORIENTABLE_ONLY_TOP:
+// separate top/side/front textures, front rotated to face FACING) since its shape is a plain cube with a distinct
+// front face — createHorizontallyRotatedBlock generates both the model and the FACING rotation blockstate.
 public class ModModelProvider extends ModelProvider {
     public ModModelProvider(PackOutput output) {
         super(output, TheGoods.MODID);
@@ -27,7 +32,7 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
-        blockModels.createTrivialCube(TheGoods.DEPOSITOR.get());
+        blockModels.createHorizontallyRotatedBlock(TheGoods.DEPOSITOR.get(), TexturedModel.ORIENTABLE_ONLY_TOP);
 
         MultiVariant model = new MultiVariant(WeightedList.of(new Variant(ModelLocationUtils.getModelLocation(TheGoods.TRADE_HUB.get()))));
         blockModels.blockStateOutput.accept(
