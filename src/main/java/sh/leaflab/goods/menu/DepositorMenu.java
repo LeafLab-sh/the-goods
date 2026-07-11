@@ -18,6 +18,10 @@ public class DepositorMenu extends AbstractContainerMenu {
     private static final int HOTBAR_START = PLAYER_INV_START + 27;
     private static final int HOTBAR_END = HOTBAR_START + 9;
 
+    // Shared with DepositorScreen (imageHeight/inventoryLabelY/row backgrounds) — same idiom as
+    // TradeHubMenu.PLAYER_INVENTORY_Y, so the menu's actual slot layout is the single source of truth.
+    public static final int PLAYER_INVENTORY_Y = 52;
+
     private final Container depositContainer;
 
     // Server-side constructor.
@@ -38,7 +42,7 @@ public class DepositorMenu extends AbstractContainerMenu {
             this.addSlot(new Slot(container, i, 44 + i * 18, 20));
         }
 
-        this.addStandardInventorySlots(playerInventory, 8, 52);
+        this.addStandardInventorySlots(playerInventory, 8, PLAYER_INVENTORY_Y);
     }
 
     @Override

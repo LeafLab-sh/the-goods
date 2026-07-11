@@ -3,20 +3,28 @@ package sh.leaflab.goods.client.gui;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 
 import sh.leaflab.goods.menu.DepositorMenu;
+
+import static net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED;
 
 public class DepositorScreen extends AbstractContainerScreen<DepositorMenu> {
     private static final int PANEL_COLOR = 0xFFC6C6C6;
     private static final int SLOT_WELL_COLOR = 0xFF8B8B8B;
     private static final int SLOT_BEVEL_LIGHT = 0xFFFFFFFF;
     private static final int SLOT_BEVEL_DARK = 0xFF373737;
-    private static final int CONTAINER_HEIGHT = 84;
+    private static final Identifier ROW_BACKGROUND = SideButtonWidget.sprite("grid/row");
+    private static final int INVENTORY_ROW_WIDTH = 9 * 18;
+    // Hotbar sits 58px below the main inventory's own Y (see AbstractContainerMenu#addStandardInventorySlots),
+    // then a standard 6px margin below the hotbar row itself closes out the panel — same convention vanilla's
+    // own Hopper screen uses for this exact 5-slot-row-plus-inventory layout.
+    private static final int IMAGE_HEIGHT = DepositorMenu.PLAYER_INVENTORY_Y + 58 + 18 + 6;
 
     public DepositorScreen(DepositorMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, 176, CONTAINER_HEIGHT + 3 * 18 + 4 + 18 + 58);
-        this.inventoryLabelY = CONTAINER_HEIGHT - 10;
+        super(menu, inventory, title, 176, IMAGE_HEIGHT);
+        this.inventoryLabelY = DepositorMenu.PLAYER_INVENTORY_Y - 10;
     }
 
     @Override
@@ -34,6 +42,12 @@ public class DepositorScreen extends AbstractContainerScreen<DepositorMenu> {
             int y = this.topPos + 20;
             extractSlotWell(graphics, x, y);
         }
+
+        for (int row = 0; row < 3; row++) {
+            int rowY = this.topPos + DepositorMenu.PLAYER_INVENTORY_Y + row * 18;
+            graphics.blitSprite(GUI_TEXTURED, ROW_BACKGROUND, this.leftPos + 8, rowY, INVENTORY_ROW_WIDTH, 18);
+        }
+        graphics.blitSprite(GUI_TEXTURED, ROW_BACKGROUND, this.leftPos + 8, this.topPos + DepositorMenu.PLAYER_INVENTORY_Y + 58, INVENTORY_ROW_WIDTH, 18);
     }
 
     private static void extractSlotWell(GuiGraphicsExtractor graphics, int x, int y) {
