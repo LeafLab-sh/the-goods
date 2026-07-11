@@ -51,7 +51,7 @@ Narratively, players are trading with an off-world spaceship (or another dimensi
 - **TransactionFeePercent** — tax on purchases only (selling is never taxed). Bound to **0–100%** inclusive.
   Collected fees are tracked in `/goods metrics` then discarded — a pure currency sink, no redirect.
 - **ItemDenyList** — default mode; excludes specific items or item tags (e.g. `minecraft:diamond`,
-  `#minecraft:tools`) from an otherwise-open economy. Empty by default. Denylisting (or de-allowlisting) an
+  `#minecraft:wool`) from an otherwise-open economy. Empty by default. Denylisting (or de-allowlisting) an
   item that already has stock still lets buyers drain it to 0, but blocks new deposits immediately.
 - **ItemAllowList** — if populated, becomes an exclusive whitelist and `ItemDenyList` is ignored. Empty by
   default. Entries can be plain item IDs (`minecraft:brick`) or tag references (`#minecraft:planks`).
