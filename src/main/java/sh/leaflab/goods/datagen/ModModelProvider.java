@@ -7,7 +7,9 @@ import net.minecraft.client.data.models.MultiVariant;
 import net.minecraft.client.data.models.blockstates.MultiVariantGenerator;
 import net.minecraft.client.data.models.blockstates.PropertyDispatch;
 import net.minecraft.client.data.models.model.ModelLocationUtils;
-import net.minecraft.client.data.models.model.TexturedModel;
+import net.minecraft.client.data.models.model.ModelTemplates;
+import net.minecraft.client.data.models.model.TextureMapping;
+import net.minecraft.client.data.models.model.TextureSlot;
 import net.minecraft.client.renderer.block.dispatch.Variant;
 import net.minecraft.core.Direction;
 import net.minecraft.data.PackOutput;
@@ -23,11 +25,13 @@ import sh.leaflab.goods.TheGoods;
 // which BlockModelGenerators' parent+texture templates can't express — so the model itself is a static asset
 // under src/main/resources rather than generated here. Only the FACING blockstate rotation is generated.
 //
-// The Depositor uses vanilla's furnace-style orientable-cube template instead (TexturedModel.ORIENTABLE_ONLY_TOP:
-// separate top/side/front textures, front rotated to face FACING) since its shape is a plain cube with a distinct
-// front face. Its FACING is BlockStateProperties.FACING_HOPPER (down + 4 horizontal, never up, matching vanilla's
-// Hopper), so the rotation dispatch is built by hand rather than via createHorizontallyRotatedBlock, which only
-// covers the 4 horizontal directions.
+// The Depositor mirrors vanilla's own createDispenserBlock exactly (BlockModelGenerators, minus the UP branch,
+// since FACING_HOPPER excludes it): a horizontal orientable-cube model (distinct top/side/front) reused via
+// Y-rotation for north/east/south/west, PLUS a *separate* vertical model (orientable_vertical: front + a single
+// side texture, no distinct top) for down. A plain X-rotation of the horizontal model doesn't work for down —
+// unlike Y-rotation, which only ever spins the four horizontal faces and leaves top/bottom untouched, X-rotation
+// swaps the top/bottom faces with north/south, so the "top" texture would bleed onto two side faces instead of
+// disappearing off the visible block entirely.
 public class ModModelProvider extends ModelProvider {
     public ModModelProvider(PackOutput output) {
         super(output, TheGoods.MODID);
@@ -35,16 +39,25 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
-        MultiVariant depositorModel = BlockModelGenerators.plainVariant(
-                TexturedModel.ORIENTABLE_ONLY_TOP.create(TheGoods.DEPOSITOR.get(), blockModels.modelOutput));
+        TextureMapping horizontalTextures = new TextureMapping()
+                .put(TextureSlot.TOP, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_top"))
+                .put(TextureSlot.SIDE, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
+                .put(TextureSlot.FRONT, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_front"));
+        TextureMapping verticalTextures = new TextureMapping()
+                .put(TextureSlot.SIDE, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
+                .put(TextureSlot.FRONT, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_front"));
+        MultiVariant horizontalModel = BlockModelGenerators.plainVariant(
+                ModelTemplates.CUBE_ORIENTABLE.create(TheGoods.DEPOSITOR.get(), horizontalTextures, blockModels.modelOutput));
+        MultiVariant verticalModel = BlockModelGenerators.plainVariant(
+                ModelTemplates.CUBE_ORIENTABLE_VERTICAL.create(TheGoods.DEPOSITOR.get(), verticalTextures, blockModels.modelOutput));
         blockModels.blockStateOutput.accept(
-                MultiVariantGenerator.dispatch(TheGoods.DEPOSITOR.get(), depositorModel)
-                        .with(PropertyDispatch.modify(BlockStateProperties.FACING_HOPPER)
-                                .select(Direction.DOWN, BlockModelGenerators.X_ROT_90)
-                                .select(Direction.NORTH, BlockModelGenerators.NOP)
-                                .select(Direction.SOUTH, BlockModelGenerators.Y_ROT_180)
-                                .select(Direction.WEST, BlockModelGenerators.Y_ROT_270)
-                                .select(Direction.EAST, BlockModelGenerators.Y_ROT_90)));
+                MultiVariantGenerator.dispatch(TheGoods.DEPOSITOR.get())
+                        .with(PropertyDispatch.initial(BlockStateProperties.FACING_HOPPER)
+                                .select(Direction.DOWN, verticalModel.with(BlockModelGenerators.X_ROT_180))
+                                .select(Direction.NORTH, horizontalModel)
+                                .select(Direction.EAST, horizontalModel.with(BlockModelGenerators.Y_ROT_90))
+                                .select(Direction.SOUTH, horizontalModel.with(BlockModelGenerators.Y_ROT_180))
+                                .select(Direction.WEST, horizontalModel.with(BlockModelGenerators.Y_ROT_270))));
 
         MultiVariant model = new MultiVariant(WeightedList.of(new Variant(ModelLocationUtils.getModelLocation(TheGoods.TRADE_HUB.get()))));
         blockModels.blockStateOutput.accept(

@@ -1,8 +1,8 @@
 {
   "variants": {
     "facing=down": {
-      "model": "thegoods:block/depositor",
-      "x": 90
+      "model": "thegoods:block/depositor_vertical",
+      "x": 180
     },
     "facing=east": {
       "model": "thegoods:block/depositor",
