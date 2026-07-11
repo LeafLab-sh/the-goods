@@ -440,7 +440,6 @@ public final class EconomyGameTests {
     // When the allow list is a tag (e.g. #minecraft:planks), only items in that tag should be sellable.
     // Restores the original allow list in a finally block so no test leaks a changed config.
     private static void tagAllowListBlocksItemsOutsideTag(GameTestHelper helper) {
-        MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "tag-allow");
         Item inTag = Items.SPRUCE_PLANKS;
         Item outsideTag = Items.PAPER;
@@ -466,7 +465,6 @@ public final class EconomyGameTests {
     // When the deny list is a tag (e.g. #minecraft:logs), items in that tag should be blocked from selling
     // while items outside the tag can still be sold. Restores config in a finally block.
     private static void tagDenyListBlocksItemsInsideTag(GameTestHelper helper) {
-        MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "tag-deny");
         Item inTag = Items.OAK_LOG;
         Item outsideTag = Items.BAMBOO;
@@ -492,7 +490,6 @@ public final class EconomyGameTests {
     // Mix of tag and plain entries in the same allow list: both the tagged group and the specific item should
     // pass, while an item matching neither should be rejected. Restores config in a finally block.
     private static void tagAndPlainEntriesWorkTogether(GameTestHelper helper) {
-        MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "tag-and-plain");
         Item tagMatch = Items.DARK_OAK_PLANKS;
         Item plainMatch = Items.BRICK;
@@ -521,7 +518,6 @@ public final class EconomyGameTests {
     // Plain (non-tag) entries still work as before when no tag references are present — existing configs
     // that only list specific items must continue to work unchanged.
     private static void nonTagEntriesStillWork(GameTestHelper helper) {
-        MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = testPlayer(helper, "plain-entries");
         Item allowed = Items.HONEYCOMB;
         Item blocked = Items.CHERRY_PLANKS;
