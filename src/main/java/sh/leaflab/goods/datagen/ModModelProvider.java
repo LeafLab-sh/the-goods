@@ -7,11 +7,15 @@ import net.minecraft.client.data.models.MultiVariant;
 import net.minecraft.client.data.models.blockstates.MultiVariantGenerator;
 import net.minecraft.client.data.models.blockstates.PropertyDispatch;
 import net.minecraft.client.data.models.model.ModelLocationUtils;
+import net.minecraft.client.data.models.model.ModelTemplates;
+import net.minecraft.client.data.models.model.TextureMapping;
+import net.minecraft.client.data.models.model.TextureSlot;
 import net.minecraft.client.renderer.block.dispatch.Variant;
 import net.minecraft.core.Direction;
 import net.minecraft.data.PackOutput;
 import net.minecraft.util.random.WeightedList;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 import sh.leaflab.goods.TheGoods;
 
@@ -20,6 +24,22 @@ import sh.leaflab.goods.TheGoods;
 // The Trade Hub's model bakes literal per-face UV crops out of a single texture (a Blockbench cube UV-unwrap),
 // which BlockModelGenerators' parent+texture templates can't express — so the model itself is a static asset
 // under src/main/resources rather than generated here. Only the FACING blockstate rotation is generated.
+//
+// The Depositor's horizontal facings (north/east/south/west) reuse vanilla's furnace-style orientable-cube
+// template, rotated via Y_ROT — CUBE_ORIENTABLE_TOP_BOTTOM (not plain CUBE_ORIENTABLE, which vanilla furnace/
+// dispenser use) so BOTTOM can be mapped to the plain side texture instead of defaulting to TOP. Furnace/dispenser
+// alias bottom to top too, but it's invisible there since both textures already look like plain metal; our top
+// texture has a distinctive funnel hole, so reusing it on the underside of a sideways-facing block reads as a
+// real bug (an "opening" implied on a face that isn't the output side) rather than vanilla's harmless duplication.
+//
+// The down facing needs its own hand-authored model (depositor_vertical.json, a static asset under
+// src/main/resources — same reason as the Trade Hub's model comment below: no BlockModelGenerators template
+// expresses it). A plain X-rotation of the horizontal model doesn't work for down: unlike Y-rotation, which only
+// ever spins the four horizontal faces and leaves top/bottom untouched, X-rotation swaps the top/bottom faces
+// with north/south, so the "top" texture would bleed onto two side faces instead of moving to a sensible spot.
+// Vanilla dispenser/dropper sidestep this by using a plain, featureless texture for all non-front faces of their
+// vertical model — we want the funnel-hole to remain visible on the true "up" face when facing down instead, which
+// needs front and top on genuinely different (opposite) faces of one model, something no built-in template covers.
 public class ModModelProvider extends ModelProvider {
     public ModModelProvider(PackOutput output) {
         super(output, TheGoods.MODID);
@@ -27,6 +47,24 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
+        TextureMapping horizontalTextures = new TextureMapping()
+                .put(TextureSlot.TOP, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_top"))
+                .put(TextureSlot.BOTTOM, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
+                .put(TextureSlot.SIDE, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
+                .put(TextureSlot.FRONT, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_front"));
+        MultiVariant horizontalModel = BlockModelGenerators.plainVariant(
+                ModelTemplates.CUBE_ORIENTABLE_TOP_BOTTOM.create(TheGoods.DEPOSITOR.get(), horizontalTextures, blockModels.modelOutput));
+        MultiVariant verticalModel = BlockModelGenerators.plainVariant(
+                ModelLocationUtils.getModelLocation(TheGoods.DEPOSITOR.get(), "_vertical"));
+        blockModels.blockStateOutput.accept(
+                MultiVariantGenerator.dispatch(TheGoods.DEPOSITOR.get())
+                        .with(PropertyDispatch.initial(BlockStateProperties.FACING_HOPPER)
+                                .select(Direction.DOWN, verticalModel.with(BlockModelGenerators.X_ROT_180))
+                                .select(Direction.NORTH, horizontalModel)
+                                .select(Direction.EAST, horizontalModel.with(BlockModelGenerators.Y_ROT_90))
+                                .select(Direction.SOUTH, horizontalModel.with(BlockModelGenerators.Y_ROT_180))
+                                .select(Direction.WEST, horizontalModel.with(BlockModelGenerators.Y_ROT_270))));
+
         MultiVariant model = new MultiVariant(WeightedList.of(new Variant(ModelLocationUtils.getModelLocation(TheGoods.TRADE_HUB.get()))));
         blockModels.blockStateOutput.accept(
                 MultiVariantGenerator.dispatch(TheGoods.TRADE_HUB.get(), model)

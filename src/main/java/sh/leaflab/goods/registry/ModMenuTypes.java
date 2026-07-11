@@ -7,6 +7,7 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import sh.leaflab.goods.TheGoods;
+import sh.leaflab.goods.menu.DepositorMenu;
 import sh.leaflab.goods.menu.TradeHubMenu;
 
 public class ModMenuTypes {
@@ -14,4 +15,7 @@ public class ModMenuTypes {
 
     public static final DeferredHolder<MenuType<?>, MenuType<TradeHubMenu>> TRADE_HUB = MENU_TYPES.register(
             "trade_hub", () -> IMenuTypeExtension.create((windowId, inv, extraData) -> new TradeHubMenu(windowId, inv)));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<DepositorMenu>> DEPOSITOR = MENU_TYPES.register(
+            "depositor", () -> IMenuTypeExtension.create((windowId, inv, extraData) -> new DepositorMenu(windowId, inv, extraData.readUtf())));
 }

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "thegoods:block/depositor_front",
+    "up": "thegoods:block/depositor_front",
+    "down": "thegoods:block/depositor_top",
+    "north": "thegoods:block/depositor_side",
+    "south": "thegoods:block/depositor_side",
+    "east": "thegoods:block/depositor_side",
+    "west": "thegoods:block/depositor_side"
+  }
+}

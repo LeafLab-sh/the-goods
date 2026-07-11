@@ -10,13 +10,15 @@ Every item has a value that rises and falls with how much of it the server has t
 
 Sell an item at the **Trade Hub** and it goes into the server's shared stock. The more of an item that's already in stock, the less each additional unit is worth — a logarithmic curve, so payouts taper off smoothly instead of cratering to zero or staying flat forever. Buying an item pulls it back out of stock and pushes the price for the *next* buyer back up. Selling something and immediately buying it back always costs you more than you got paid, so there's no free-money loop to exploit.
 
+For automated harvesting, place a **Depositor** block adjacent to the Trade Hub. Hopper/dropper feeds go in, and the Depositor auto-sells eligible items into the economy, crediting the placer's account.
+
 ## Requirements
 
 - Minecraft 26.2
 - NeoForge 26.2.0.7-beta or later
 - Java 25 (bundled with modern NeoForge installers — you generally don't need to install this yourself)
 
-This is a **server-side economy**: balances and stock are stored per-world/per-server, so all players on a given server share the same market. It needs to be installed on the server; players also need it installed client-side to see the Trade Hub screen.
+This is a **server-side economy**: balances and stock are stored per-world/per-server, so all players on a given server share the same market. It needs to be installed on the server; players also need it installed client-side to see the Trade Hub and Depositor screens.
 
 ## Installation
 
@@ -30,6 +32,7 @@ This is a **server-side economy**: balances and stock are stored per-world/per-s
 2. **Place it** and right-click to open the trading screen.
 3. **Sell** something: drag an eligible item stack into the Sell Slot on the left. It sells instantly — no confirmation step, no waiting.
 4. **Buy** something: search or browse the catalog on the right side of the screen, click an item, pick a quantity, and hit Confirm.
+5. **(Optional) Automate with a Depositor.** Craft a **Depositor** (iron ingots in a U shape around a chest) and place it adjacent to the Trade Hub with its output face toward the hub. Feed items in via hopper or dropper on any other face — the Depositor sells them automatically and credits your account.
 
 Only plain, unmodified item stacks can be sold — no enchanted gear, no renamed items, nothing with custom NBT/components. That's intentional: it keeps every unit of a given item identical in value, and stops players from using rare modifications to dodge the pricing curve.
 
