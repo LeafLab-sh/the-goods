@@ -13,6 +13,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.data.PackOutput;
 import net.minecraft.util.random.WeightedList;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 import sh.leaflab.goods.TheGoods;
 
@@ -24,7 +25,9 @@ import sh.leaflab.goods.TheGoods;
 //
 // The Depositor uses vanilla's furnace-style orientable-cube template instead (TexturedModel.ORIENTABLE_ONLY_TOP:
 // separate top/side/front textures, front rotated to face FACING) since its shape is a plain cube with a distinct
-// front face — createHorizontallyRotatedBlock generates both the model and the FACING rotation blockstate.
+// front face. Its FACING is BlockStateProperties.FACING_HOPPER (down + 4 horizontal, never up, matching vanilla's
+// Hopper), so the rotation dispatch is built by hand rather than via createHorizontallyRotatedBlock, which only
+// covers the 4 horizontal directions.
 public class ModModelProvider extends ModelProvider {
     public ModModelProvider(PackOutput output) {
         super(output, TheGoods.MODID);
@@ -32,7 +35,16 @@ public class ModModelProvider extends ModelProvider {
 
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
-        blockModels.createHorizontallyRotatedBlock(TheGoods.DEPOSITOR.get(), TexturedModel.ORIENTABLE_ONLY_TOP);
+        MultiVariant depositorModel = BlockModelGenerators.plainVariant(
+                TexturedModel.ORIENTABLE_ONLY_TOP.create(TheGoods.DEPOSITOR.get(), blockModels.modelOutput));
+        blockModels.blockStateOutput.accept(
+                MultiVariantGenerator.dispatch(TheGoods.DEPOSITOR.get(), depositorModel)
+                        .with(PropertyDispatch.modify(BlockStateProperties.FACING_HOPPER)
+                                .select(Direction.DOWN, BlockModelGenerators.X_ROT_90)
+                                .select(Direction.NORTH, BlockModelGenerators.NOP)
+                                .select(Direction.SOUTH, BlockModelGenerators.Y_ROT_180)
+                                .select(Direction.WEST, BlockModelGenerators.Y_ROT_270)
+                                .select(Direction.EAST, BlockModelGenerators.Y_ROT_90)));
 
         MultiVariant model = new MultiVariant(WeightedList.of(new Variant(ModelLocationUtils.getModelLocation(TheGoods.TRADE_HUB.get()))));
         blockModels.blockStateOutput.accept(

@@ -16,27 +16,30 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
-import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
 import sh.leaflab.goods.menu.DepositorMenu;
 import sh.leaflab.goods.registry.ModBlockEntities;
 
 // Facing points toward the block's *output* side — the Depositor accepts hopper/dropper input from the
-// other 5 sides (see docs/spec.md), and the model/texture render a visible spout on the facing side so
-// players can tell which way to orient it toward a Trade Hub.
-public class DepositorBlock extends HorizontalDirectionalBlock implements EntityBlock {
+// other sides (see docs/spec.md), and the model/texture render a visible spout on the facing side so
+// players can tell which way to orient it toward a Trade Hub. Uses the same FACING (down + 4 horizontal,
+// never up) as vanilla's Hopper, since a Depositor should be able to output downward the same way.
+public class DepositorBlock extends Block implements EntityBlock {
+    public static final EnumProperty<Direction> FACING = BlockStateProperties.FACING_HOPPER;
     private static final MapCodec<DepositorBlock> CODEC = simpleCodec(DepositorBlock::new);
 
     public DepositorBlock(BlockBehaviour.Properties properties) {
         super(properties);
-        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
+        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.DOWN));
     }
 
     @Override
@@ -51,7 +54,8 @@ public class DepositorBlock extends HorizontalDirectionalBlock implements Entity
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+        Direction direction = context.getClickedFace().getOpposite();
+        return defaultBlockState().setValue(FACING, direction.getAxis() == Direction.Axis.Y ? Direction.DOWN : direction);
     }
 
     @Nullable

@@ -1,5 +1,9 @@
 {
   "variants": {
+    "facing=down": {
+      "model": "thegoods:block/depositor",
+      "x": 90
+    },
     "facing=east": {
       "model": "thegoods:block/depositor",
       "y": 90
