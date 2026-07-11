@@ -8,6 +8,9 @@
 
   "gui.thegoods.trade_hub.sell_heading": "Sell",
 
+  "gui.thegoods.depositor.owner": "Owner: %s",
+  "gui.thegoods.depositor.owner.unowned": "Unowned",
+
   "gui.thegoods.catalog.search": "Search",
   "gui.thegoods.catalog.sort_type.name": "Sort: Name",
   "gui.thegoods.catalog.sort_type.price": "Sort: Price",

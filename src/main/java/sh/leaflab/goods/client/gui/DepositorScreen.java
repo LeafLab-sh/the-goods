@@ -15,6 +15,8 @@ public class DepositorScreen extends AbstractContainerScreen<DepositorMenu> {
     private static final int SLOT_WELL_COLOR = 0xFF8B8B8B;
     private static final int SLOT_BEVEL_LIGHT = 0xFFFFFFFF;
     private static final int SLOT_BEVEL_DARK = 0xFF373737;
+    private static final int OWNER_LABEL_COLOR = 0xFF707070;
+    private static final int OWNER_LABEL_Y = 16;
     private static final Identifier ROW_BACKGROUND = SideButtonWidget.sprite("grid/row");
     private static final int INVENTORY_ROW_WIDTH = 9 * 18;
     // Hotbar sits 58px below the main inventory's own Y (see AbstractContainerMenu#addStandardInventorySlots),
@@ -39,7 +41,7 @@ public class DepositorScreen extends AbstractContainerScreen<DepositorMenu> {
 
         for (int i = 0; i < 5; i++) {
             int x = this.leftPos + 44 + i * 18;
-            int y = this.topPos + 20;
+            int y = this.topPos + DepositorMenu.DEPOSITOR_SLOTS_Y;
             extractSlotWell(graphics, x, y);
         }
 
@@ -59,6 +61,12 @@ public class DepositorScreen extends AbstractContainerScreen<DepositorMenu> {
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         graphics.text(this.font, this.title, this.titleLabelX, this.titleLabelY, 0xFF404040, false);
+
+        String ownerName = this.menu.getOwnerName();
+        Component ownerLabel = Component.translatable("gui.thegoods.depositor.owner",
+                ownerName != null && !ownerName.isEmpty() ? ownerName : Component.translatable("gui.thegoods.depositor.owner.unowned"));
+        graphics.text(this.font, ownerLabel, this.titleLabelX, OWNER_LABEL_Y, OWNER_LABEL_COLOR, false);
+
         graphics.text(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, 0xFF404040, false);
     }
 }

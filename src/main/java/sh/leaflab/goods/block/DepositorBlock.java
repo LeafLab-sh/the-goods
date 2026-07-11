@@ -77,7 +77,7 @@ public class DepositorBlock extends Block implements EntityBlock {
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         if (placer instanceof ServerPlayer serverPlayer && level.getBlockEntity(pos) instanceof DepositorBlockEntity be) {
-            be.setOwner(serverPlayer.getUUID());
+            be.setOwner(serverPlayer.getUUID(), serverPlayer.getGameProfile().name());
         }
     }
 
@@ -85,9 +85,11 @@ public class DepositorBlock extends Block implements EntityBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
         if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer) {
             if (level.getBlockEntity(pos) instanceof DepositorBlockEntity be) {
+                String ownerName = be.getOwnerName() != null ? be.getOwnerName() : "";
                 serverPlayer.openMenu(new SimpleMenuProvider(
                         (windowId, inventory, p) -> new DepositorMenu(windowId, inventory, be),
-                        Component.translatable("block.thegoods.depositor")));
+                        Component.translatable("block.thegoods.depositor")),
+                        buf -> buf.writeUtf(ownerName));
             }
         }
         return InteractionResult.SUCCESS;

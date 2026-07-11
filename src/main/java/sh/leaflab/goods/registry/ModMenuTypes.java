@@ -17,5 +17,5 @@ public class ModMenuTypes {
             "trade_hub", () -> IMenuTypeExtension.create((windowId, inv, extraData) -> new TradeHubMenu(windowId, inv)));
 
     public static final DeferredHolder<MenuType<?>, MenuType<DepositorMenu>> DEPOSITOR = MENU_TYPES.register(
-            "depositor", () -> IMenuTypeExtension.create((windowId, inv, extraData) -> new DepositorMenu(windowId, inv)));
+            "depositor", () -> IMenuTypeExtension.create((windowId, inv, extraData) -> new DepositorMenu(windowId, inv, extraData.readUtf())));
 }

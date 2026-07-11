@@ -31,6 +31,9 @@ public class DepositorBlockEntity extends BlockEntity implements Container {
 
     private final NonNullList<ItemStack> items = NonNullList.withSize(SLOT_COUNT, ItemStack.EMPTY);
     private UUID owner;
+    // Captured once at placement time (see setOwner) rather than resolved live from the UUID on every menu open —
+    // if the owner later changes their username, the Depositor keeps showing the name they had when it was placed.
+    private String ownerName;
     private int cooldown;
 
     public DepositorBlockEntity(BlockPos pos, BlockState state) {
@@ -87,13 +90,18 @@ public class DepositorBlockEntity extends BlockEntity implements Container {
         }
     }
 
-    public void setOwner(UUID uuid) {
+    public void setOwner(UUID uuid, String name) {
         this.owner = uuid;
+        this.ownerName = name;
         setChanged();
     }
 
     public UUID getOwner() {
         return owner;
+    }
+
+    public String getOwnerName() {
+        return ownerName;
     }
 
     public int getAnalogSignal() {
@@ -157,6 +165,9 @@ public class DepositorBlockEntity extends BlockEntity implements Container {
         if (owner != null) {
             output.putString("Owner", owner.toString());
         }
+        if (ownerName != null) {
+            output.putString("OwnerName", ownerName);
+        }
         output.putInt("Cooldown", cooldown);
         ValueOutput inv = output.child("Inventory");
         for (int i = 0; i < SLOT_COUNT; i++) {
@@ -169,6 +180,7 @@ public class DepositorBlockEntity extends BlockEntity implements Container {
         super.loadAdditional(input);
         String ownerStr = input.getStringOr("Owner", null);
         owner = ownerStr != null ? UUID.fromString(ownerStr) : null;
+        ownerName = input.getStringOr("OwnerName", null);
         cooldown = input.getIntOr("Cooldown", 0);
         ValueInput inv = input.childOrEmpty("Inventory");
         for (int i = 0; i < SLOT_COUNT; i++) {

@@ -18,31 +18,42 @@ public class DepositorMenu extends AbstractContainerMenu {
     private static final int HOTBAR_START = PLAYER_INV_START + 27;
     private static final int HOTBAR_END = HOTBAR_START + 9;
 
+    // Own slot row moved down from the vanilla-Hopper-matching y=20 to make room for the owner name label
+    // beneath the title; PLAYER_INVENTORY_Y shifts by the same amount to preserve the original gap below it.
+    public static final int DEPOSITOR_SLOTS_Y = 28;
+
     // Shared with DepositorScreen (imageHeight/inventoryLabelY/row backgrounds) — same idiom as
     // TradeHubMenu.PLAYER_INVENTORY_Y, so the menu's actual slot layout is the single source of truth.
-    public static final int PLAYER_INVENTORY_Y = 52;
+    public static final int PLAYER_INVENTORY_Y = 60;
 
     private final Container depositContainer;
+    private final String ownerName;
 
     // Server-side constructor.
     public DepositorMenu(int containerId, Inventory playerInventory, DepositorBlockEntity be) {
-        this(containerId, playerInventory, (Container) be);
+        this(containerId, playerInventory, (Container) be, be.getOwnerName() != null ? be.getOwnerName() : "");
     }
 
-    // Client-side constructor (from IMenuTypeExtension).
-    public DepositorMenu(int containerId, Inventory playerInventory) {
-        this(containerId, playerInventory, new SimpleContainer(DEPOSITOR_SLOT_COUNT));
+    // Client-side constructor (from IMenuTypeExtension) — ownerName arrives via extra data written in
+    // DepositorBlock#useWithoutItem, since the client doesn't have direct access to the real block entity here.
+    public DepositorMenu(int containerId, Inventory playerInventory, String ownerName) {
+        this(containerId, playerInventory, new SimpleContainer(DEPOSITOR_SLOT_COUNT), ownerName);
     }
 
-    private DepositorMenu(int containerId, Inventory playerInventory, Container container) {
+    private DepositorMenu(int containerId, Inventory playerInventory, Container container, String ownerName) {
         super(ModMenuTypes.DEPOSITOR.get(), containerId);
         this.depositContainer = container;
+        this.ownerName = ownerName;
 
         for (int i = 0; i < DEPOSITOR_SLOT_COUNT; i++) {
-            this.addSlot(new Slot(container, i, 44 + i * 18, 20));
+            this.addSlot(new Slot(container, i, 44 + i * 18, DEPOSITOR_SLOTS_Y));
         }
 
         this.addStandardInventorySlots(playerInventory, 8, PLAYER_INVENTORY_Y);
+    }
+
+    public String getOwnerName() {
+        return ownerName;
     }
 
     @Override
