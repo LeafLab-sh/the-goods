@@ -25,13 +25,21 @@ import sh.leaflab.goods.TheGoods;
 // which BlockModelGenerators' parent+texture templates can't express — so the model itself is a static asset
 // under src/main/resources rather than generated here. Only the FACING blockstate rotation is generated.
 //
-// The Depositor mirrors vanilla's own createDispenserBlock exactly (BlockModelGenerators, minus the UP branch,
-// since FACING_HOPPER excludes it): a horizontal orientable-cube model (distinct top/side/front) reused via
-// Y-rotation for north/east/south/west, PLUS a *separate* vertical model (orientable_vertical: front + a single
-// side texture, no distinct top) for down. A plain X-rotation of the horizontal model doesn't work for down —
-// unlike Y-rotation, which only ever spins the four horizontal faces and leaves top/bottom untouched, X-rotation
-// swaps the top/bottom faces with north/south, so the "top" texture would bleed onto two side faces instead of
-// disappearing off the visible block entirely.
+// The Depositor's horizontal facings (north/east/south/west) reuse vanilla's furnace-style orientable-cube
+// template, rotated via Y_ROT — CUBE_ORIENTABLE_TOP_BOTTOM (not plain CUBE_ORIENTABLE, which vanilla furnace/
+// dispenser use) so BOTTOM can be mapped to the plain side texture instead of defaulting to TOP. Furnace/dispenser
+// alias bottom to top too, but it's invisible there since both textures already look like plain metal; our top
+// texture has a distinctive funnel hole, so reusing it on the underside of a sideways-facing block reads as a
+// real bug (an "opening" implied on a face that isn't the output side) rather than vanilla's harmless duplication.
+//
+// The down facing needs its own hand-authored model (depositor_vertical.json, a static asset under
+// src/main/resources — same reason as the Trade Hub's model comment below: no BlockModelGenerators template
+// expresses it). A plain X-rotation of the horizontal model doesn't work for down: unlike Y-rotation, which only
+// ever spins the four horizontal faces and leaves top/bottom untouched, X-rotation swaps the top/bottom faces
+// with north/south, so the "top" texture would bleed onto two side faces instead of moving to a sensible spot.
+// Vanilla dispenser/dropper sidestep this by using a plain, featureless texture for all non-front faces of their
+// vertical model — we want the funnel-hole to remain visible on the true "up" face when facing down instead, which
+// needs front and top on genuinely different (opposite) faces of one model, something no built-in template covers.
 public class ModModelProvider extends ModelProvider {
     public ModModelProvider(PackOutput output) {
         super(output, TheGoods.MODID);
@@ -41,15 +49,13 @@ public class ModModelProvider extends ModelProvider {
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
         TextureMapping horizontalTextures = new TextureMapping()
                 .put(TextureSlot.TOP, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_top"))
-                .put(TextureSlot.SIDE, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
-                .put(TextureSlot.FRONT, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_front"));
-        TextureMapping verticalTextures = new TextureMapping()
+                .put(TextureSlot.BOTTOM, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
                 .put(TextureSlot.SIDE, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_side"))
                 .put(TextureSlot.FRONT, TextureMapping.getBlockTexture(TheGoods.DEPOSITOR.get(), "_front"));
         MultiVariant horizontalModel = BlockModelGenerators.plainVariant(
-                ModelTemplates.CUBE_ORIENTABLE.create(TheGoods.DEPOSITOR.get(), horizontalTextures, blockModels.modelOutput));
+                ModelTemplates.CUBE_ORIENTABLE_TOP_BOTTOM.create(TheGoods.DEPOSITOR.get(), horizontalTextures, blockModels.modelOutput));
         MultiVariant verticalModel = BlockModelGenerators.plainVariant(
-                ModelTemplates.CUBE_ORIENTABLE_VERTICAL.create(TheGoods.DEPOSITOR.get(), verticalTextures, blockModels.modelOutput));
+                ModelLocationUtils.getModelLocation(TheGoods.DEPOSITOR.get(), "_vertical"));
         blockModels.blockStateOutput.accept(
                 MultiVariantGenerator.dispatch(TheGoods.DEPOSITOR.get())
                         .with(PropertyDispatch.initial(BlockStateProperties.FACING_HOPPER)
