@@ -64,10 +64,10 @@ After the first launch, edit `config/thegoods-common.toml` (or use the in-game *
 |---|---|---|
 | `currencyName` | `Credits` | The server-wide display name for the currency |
 | `transactionFeePercent` | `0` | Percentage fee charged on **buys only** (0–100); sells are never taxed |
-| `itemDenyList` | *(empty)* | Item IDs (e.g. `minecraft:diamond`) excluded from trading. Ignored if `itemAllowList` is non-empty. Denylisting an item that already has stock still lets that stock be bought down to 0 — it only blocks *new* deposits from that point on |
-| `itemAllowList` | *(empty)* | If non-empty, **only** these item IDs can be traded, and `itemDenyList` is ignored |
+| `itemDenyList` | *(empty)* | Item IDs (e.g. `minecraft:diamond`) or tag references (e.g. `#minecraft:wool`) excluded from trading. Ignored if `itemAllowList` is non-empty. Denylisting an item that already has stock still lets that stock be bought down to 0 — it only blocks *new* deposits from that point on |
+| `itemAllowList` | *(empty)* | If non-empty, **only** these items/tags can be traded, and `itemDenyList` is ignored. Supports plain IDs (`minecraft:brick`) and tag references (`#minecraft:planks`) |
 
-An invalid entry in either list (not a real item ID, or not a registered item) will fail config loading with a specific error in the log rather than silently being dropped — check your server log if the config doesn't seem to be taking effect.
+An invalid entry in either list (not a real item or tag ID) will fail config loading with a specific error in the log rather than silently being dropped — check your server log if the config doesn't seem to be taking effect.
 
 ## Building from source
 
