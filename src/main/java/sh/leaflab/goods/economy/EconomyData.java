@@ -16,6 +16,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
 import sh.leaflab.goods.TheGoods;
+import sh.leaflab.goods.api.TradeRequest;
 
 public class EconomyData extends SavedData {
     // Bumped from 1: added lifetime_fees (Milestone 7). Old saves without the field default to 0 via

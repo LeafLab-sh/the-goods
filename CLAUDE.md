@@ -78,6 +78,22 @@ All game objects (blocks, items, creative tabs) use `DeferredRegister` + `Deferr
 attached to `modEventBus` in the mod constructor before the game loads them. See `TheGoods.java` for the 
 canonical pattern.
 
+### API source set (`src/api/java`)
+The `api` source set (`sh.leaflab.goods.api`) exposes a stable interop surface (`ITheGoodsAPI`,
+events on `NeoForge.EVENT_BUS`). Published as a separate `-api.jar`. Other mods compile
+against it as `compileOnly`. The api source set does NOT depend on `main`'s output
+(to avoid circular build deps); it gets its Minecraft/NeoForge deps through the NeoForge
+moddev plugin's `mods { sourceSet(sourceSets.api) }` declaration and the
+`apiImplementation.extendsFrom(modDevCompileDependencies)` wiring in `build.gradle`.
+
+The api source set IS included in `neoForge.mods` alongside `main` (both belong to the
+`thegoods` mod). The key wiring that avoids circular build deps:
+- `apiImplementation.extendsFrom(modDevCompileDependencies)` — gives the api source set
+  Minecraft/NeoForge classes without pulling in `main`'s output.
+- `implementation sourceSets.api.output` — makes `main` depend on `api` (compile order).
+- No `extendsFrom(implementation)` on `apiImplementation` (that would circularly pull
+  `api.output` back into `api`'s own classpath).
+
 ### Side separation
 - `TheGoods.java` — common (both sides); holds all `DeferredRegister` statics
 - `TheGoodsClient.java` — client only (`@Mod(dist = Dist.CLIENT)`); safe to access client APIs here
