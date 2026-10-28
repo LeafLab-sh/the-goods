@@ -106,9 +106,12 @@ task into `build/generated/sources/modMetadata/`. The `neoforge.mods.toml` lives
 - `.github/workflows/*.yml` — every third-party action (inside the composite action or a workflow directly) is
   pinned to a commit SHA (not a version tag), with a `# vX.Y.Z` comment alongside it; keep new/updated actions
   pinned the same way.
-- Pushing a tag matching `v*.*.*` triggers `release.yml`: builds, runs both test suites, creates a GitHub
-  Release, and publishes to CurseForge. The tag itself is the version — it overrides `mod_version` at build
-  time, so `gradle.properties`'s value never needs to be kept in sync with it.
+- Releases are made by release-please (`release.yml`) from the Conventional Commits on `main`. It keeps a
+  release pull request open with the next version in `gradle.properties` and `CHANGELOG.md`; merging it is the
+  release. Never edit `mod_version`, `.release-please-manifest.json` or `CHANGELOG.md` by hand, and never push a
+  `v*` tag: the org lets only the `leaflab-automation` App create one (`standards/releases`).
+- A release is a draft until `release.yml` has built and tested the tag, attached the jar and published to
+  CurseForge. Publishing it makes it immutable, so a bad release is fixed by the next patch, not by editing it.
 
 ## Working in LeafLab-sh
 
